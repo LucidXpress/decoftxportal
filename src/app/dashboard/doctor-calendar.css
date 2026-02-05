@@ -1,0 +1,43 @@
+/* DEC theme overrides for react-big-calendar on doctor dashboard */
+.doctor-calendar-wrapper .rbc-toolbar button {
+  border-color: var(--dec-border);
+  color: var(--dec-base);
+}
+.doctor-calendar-wrapper .rbc-toolbar button:hover {
+  background: var(--dec-light-soft);
+}
+.doctor-calendar-wrapper .rbc-toolbar-label {
+  color: var(--dec-base);
+  font-weight: 600;
+}
+.doctor-calendar-wrapper .rbc-header {
+  border-color: var(--dec-border);
+  color: var(--dec-muted);
+}
+.doctor-calendar-wrapper .rbc-month-view,
+.doctor-calendar-wrapper .rbc-day-bg {
+  border-color: var(--dec-border);
+}
+.doctor-calendar-wrapper .rbc-off-range-bg {
+  background: var(--dec-light-bg);
+}
+.doctor-calendar-wrapper .rbc-today {
+  background: var(--dec-light-soft);
+}
+.doctor-calendar-wrapper .rbc-event {
+  background: var(--dec-base) !important;
+  border: none !important;
+  color: #fff !important;
+}
+.doctor-calendar-wrapper .rbc-event:hover {
+  background: var(--dec-base-hover) !important;
+}
+.doctor-calendar-wrapper .rbc-event-content {
+  color: #fff;
+}
+.doctor-calendar-wrapper .rbc-show-more {
+  color: var(--dec-base);
+}
+.doctor-calendar-wrapper .rbc-show-more:hover {
+  text-decoration: underline;
+}
