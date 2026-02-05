@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -11,10 +11,12 @@ export async function GET() {
   if (role !== "reception") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const doctors = await prisma.user.findMany({
-    where: { role: "doctor" },
-    select: { id: true, name: true, email: true },
-    orderBy: { name: "asc" },
-  });
-  return NextResponse.json(doctors);
+  const supabase = await createClient();
+  const { data: doctors, error } = await supabase
+    .from("users")
+    .select("id, name, email")
+    .eq("role", "doctor")
+    .order("name", { ascending: true });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(doctors ?? []);
 }

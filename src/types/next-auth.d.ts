@@ -1,4 +1,4 @@
-import type { Role } from "@prisma/client";
+import type { Role } from "@/types/database";
 import "next-auth";
 import type { JWT } from "next-auth/jwt";
 

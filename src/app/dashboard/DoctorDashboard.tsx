@@ -11,7 +11,7 @@ import "./doctor-calendar.css";
 type Appointment = {
   id: string;
   patientName: string;
-  appointmentDate: Date;
+  appointmentDate: string | Date;
   durationMinutes: number;
   examType: string;
   status: string;

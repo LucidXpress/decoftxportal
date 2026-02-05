@@ -8,7 +8,7 @@ type Doctor = { id: string; name: string | null; email: string | null };
 type Appointment = {
   id: string;
   patientName: string;
-  appointmentDate: Date;
+  appointmentDate: string | Date;
   durationMinutes: number;
   examType: string;
   status: string;
@@ -74,7 +74,7 @@ export function ReceptionDashboard({
     if (editingId) setFormErrors({});
   }, [editingId]);
 
-  const formatDate = (d: Date) =>
+  const formatDate = (d: string | Date) =>
     new Date(d).toLocaleString("en-US", {
       weekday: "short",
       month: "short",

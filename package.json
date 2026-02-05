@@ -4,17 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:generate": "prisma generate",
-    "db:push": "node scripts/db-push.js",
-    "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
-    "db:seed": "npx tsx prisma/seed.ts"
+    "db:seed": "npx tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.11.1",
-    "@prisma/client": "^6.19.2",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.95.2",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.1.0",
     "next": "16.1.6",
@@ -35,7 +32,6 @@
     "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "prisma": "^6.19.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

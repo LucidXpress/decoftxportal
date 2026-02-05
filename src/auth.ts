@@ -1,8 +1,8 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { checkAuthRateLimit } from "@/lib/rate-limit";
-import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { getSupabase } from "@/lib/supabaseClient";
+import type { Role } from "@/types/database";
 import bcrypt from "bcryptjs";
 
 if (process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET) {
@@ -21,17 +21,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!credentials?.email || !credentials?.password) return null;
         const email = String(credentials.email).trim().toLowerCase();
         if (!checkAuthRateLimit(email).allowed) return null;
-        const user = await prisma.user.findFirst({
-          where: { email, password: { not: null } },
-        });
-        if (!user?.password) return null;
+        const { data: user, error } = await getSupabase()
+          .from("users")
+          .select("id, email, name, password, role")
+          .eq("email", email)
+          .not("password", "is", null)
+          .maybeSingle();
+        if (error || !user?.password) return null;
         const ok = bcrypt.compareSync(String(credentials.password), user.password);
         if (!ok) return null;
         return {
           id: user.id,
           email: user.email ?? undefined,
           name: user.name ?? undefined,
-          role: user.role,
+          role: user.role as Role,
         };
       },
     }),
