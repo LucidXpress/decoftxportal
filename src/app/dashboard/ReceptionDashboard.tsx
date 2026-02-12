@@ -481,7 +481,7 @@ export function ReceptionDashboard({
                 Patient will receive an email confirmation when the appointment is created.
               </p>
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <label className={labelClass}>Patient phone (optional)</label>
               <input
                 name="patientPhone"
