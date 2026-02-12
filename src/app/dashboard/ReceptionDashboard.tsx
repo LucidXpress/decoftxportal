@@ -14,6 +14,9 @@ type Appointment = {
   status: string;
   oneDriveLink: string | null;
   internalNotes: string | null;
+  addedBy: string | null;
+  patientPhone: string | null;
+  patientEmail: string | null;
   assignedDoctor: Doctor | null;
 };
 
@@ -106,11 +109,13 @@ export function ReceptionDashboard({
     setFormErrors({});
     const form = e.currentTarget;
     const patientName = (form.elements.namedItem("patientName") as HTMLInputElement).value.trim();
+    const addedBy = (form.elements.namedItem("addedBy") as HTMLInputElement).value.trim();
     const appointmentDateValue = (form.elements.namedItem("appointmentDate") as HTMLInputElement).value;
     const oneDriveLinkValue = (form.elements.namedItem("oneDriveLink") as HTMLInputElement).value.trim();
 
     const errors: Record<string, string> = {};
     if (!patientName) errors.patientName = "Patient name is required.";
+    if (!addedBy) errors.addedBy = "Added by is required.";
     const appointmentDate = appointmentDateValue ? new Date(appointmentDateValue) : null;
     if (appointmentDate && isPastDate(appointmentDate.toISOString())) {
       errors.appointmentDate = "Date & time cannot be in the past.";
@@ -125,8 +130,13 @@ export function ReceptionDashboard({
 
     setLoadingCreate(true);
     try {
+      const patientPhoneValue = (form.elements.namedItem("patientPhone") as HTMLInputElement)?.value.trim() || null;
+      const patientEmailValue = (form.elements.namedItem("patientEmail") as HTMLInputElement)?.value.trim() || null;
       const data = {
         patientName,
+        addedBy,
+        patientPhone: patientPhoneValue,
+        patientEmail: patientEmailValue,
         appointmentDate: appointmentDate!.toISOString(),
         durationMinutes: parseInt(
           (form.elements.namedItem("durationMinutes") as HTMLInputElement).value,
@@ -186,6 +196,8 @@ export function ReceptionDashboard({
 
     setLoadingEditId(id);
     try {
+      const patientPhoneValue = (form.elements.namedItem("patientPhone") as HTMLInputElement)?.value.trim() || null;
+      const patientEmailValue = (form.elements.namedItem("patientEmail") as HTMLInputElement)?.value.trim() || null;
       const data = {
         patientName,
         appointmentDate: appointmentDate?.toISOString(),
@@ -195,6 +207,8 @@ export function ReceptionDashboard({
         ),
         examType: (form.elements.namedItem("examType") as HTMLInputElement).value,
         status: (form.elements.namedItem("status") as HTMLSelectElement).value as "scheduled" | "completed" | "cancelled",
+        patientPhone: patientPhoneValue,
+        patientEmail: patientEmailValue,
         oneDriveLink: oneDriveLinkValue || null,
         internalNotes: (form.elements.namedItem("internalNotes") as HTMLInputElement).value.trim() || null,
         assignedDoctorId: (form.elements.namedItem("assignedDoctorId") as HTMLSelectElement).value || null,
@@ -350,13 +364,15 @@ export function ReceptionDashboard({
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--dec-base)] sm:text-3xl">
           Appointments
         </h1>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="rounded-full bg-[var(--dec-base)] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--dec-base-hover)] hover:shadow"
-        >
-          {showForm ? "Cancel" : "New appointment"}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="rounded-full bg-[var(--dec-base)] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--dec-base-hover)] hover:shadow"
+          >
+            {showForm ? "Cancel" : "New appointment"}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -389,6 +405,26 @@ export function ReceptionDashboard({
               )}
             </div>
             <div>
+              <label className={labelClass}>Added by</label>
+              <input
+                name="addedBy"
+                type="text"
+                required
+                placeholder="Your name"
+                className={formErrors.addedBy ? inputErrorClass : inputClass}
+                aria-invalid={!!formErrors.addedBy}
+                aria-describedby={formErrors.addedBy ? "create-err-addedBy" : undefined}
+              />
+              {formErrors.addedBy && (
+                <p id="create-err-addedBy" className="mt-1 text-sm text-[var(--dec-error)]">
+                  {formErrors.addedBy}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-[var(--dec-muted)]">
+                Who is adding this appointment (for the team to see).
+              </p>
+            </div>
+            <div>
               <label className={labelClass}>Date & time</label>
               <input
                 name="appointmentDate"
@@ -412,7 +448,7 @@ export function ReceptionDashboard({
               <label className={labelClass}>Exam type</label>
               <input name="examType" required className={inputClass} />
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <label className={labelClass}>Assign doctor</label>
               <select name="assignedDoctorId" className={inputClass}>
                 <option value="">— Select —</option>
@@ -422,9 +458,41 @@ export function ReceptionDashboard({
               </select>
               {doctors.length === 0 && (
                 <p className="mt-1 text-xs text-[var(--dec-muted)]">
-                  No doctors in system yet. Have doctors sign in once; add their emails to DOCTOR_EMAILS.
+                  No doctors yet. Go to <strong>Doctors</strong> in the header to add doctor logins.
                 </p>
               )}
+            </div>
+            <div>
+              <label className={labelClass}>Patient email (optional)</label>
+              <input
+                name="patientEmail"
+                type="email"
+                placeholder="patient@example.com"
+                className={formErrors.patientEmail ? inputErrorClass : inputClass}
+                aria-invalid={!!formErrors.patientEmail}
+                aria-describedby={formErrors.patientEmail ? "create-err-patientEmail" : "create-desc-patientEmail"}
+              />
+              {formErrors.patientEmail && (
+                <p id="create-err-patientEmail" className="mt-1 text-sm text-[var(--dec-error)]">
+                  {formErrors.patientEmail}
+                </p>
+              )}
+              <p id="create-desc-patientEmail" className="mt-1 text-xs text-[var(--dec-muted)]">
+                Patient will receive an email confirmation when the appointment is created.
+              </p>
+            </div>
+            <div className="sm:col-span-2">
+              <label className={labelClass}>Patient phone (optional)</label>
+              <input
+                name="patientPhone"
+                type="tel"
+                placeholder="(555) 123-4567"
+                className={inputClass}
+                aria-describedby="create-desc-patientPhone"
+              />
+              <p id="create-desc-patientPhone" className="mt-1 text-xs text-[var(--dec-muted)]">
+                Patient will receive an SMS confirmation when the appointment is created (requires Twilio).
+              </p>
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>OneDrive link (optional)</label>
@@ -558,6 +626,19 @@ export function ReceptionDashboard({
                   <p className="text-sm text-[var(--dec-muted)]">
                     Doctor: {apt.assignedDoctor?.name ?? apt.assignedDoctor?.email ?? "—"}
                   </p>
+                  <p className="text-sm text-[var(--dec-muted)]">
+                    Added by: {apt.addedBy ?? "—"}
+                  </p>
+                  {apt.patientEmail && (
+                    <p className="text-sm text-[var(--dec-muted)]">
+                      Patient email: {apt.patientEmail}
+                    </p>
+                  )}
+                  {apt.patientPhone && (
+                    <p className="text-sm text-[var(--dec-muted)]">
+                      Patient phone: {apt.patientPhone}
+                    </p>
+                  )}
                   {apt.internalNotes && (
                     <p className="mt-1 text-sm text-[var(--dec-muted)]">{apt.internalNotes}</p>
                   )}
@@ -745,6 +826,12 @@ export function ReceptionDashboard({
                 </select>
               </div>
               <div>
+                <span className={labelClass}>Added by</span>
+                <p className="mt-0.5 text-sm text-[var(--dec-muted)]">
+                  {editingAppointment.addedBy ?? "—"}
+                </p>
+              </div>
+              <div>
                 <label className={labelClass}>Assign doctor</label>
                 <select
                   name="assignedDoctorId"
@@ -756,6 +843,26 @@ export function ReceptionDashboard({
                     <option key={d.id} value={d.id}>{d.name ?? d.email}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className={labelClass}>Patient email (optional)</label>
+                <input
+                  name="patientEmail"
+                  type="email"
+                  placeholder="patient@example.com"
+                  defaultValue={editingAppointment.patientEmail ?? ""}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Patient phone (optional)</label>
+                <input
+                  name="patientPhone"
+                  type="tel"
+                  placeholder="(555) 123-4567"
+                  defaultValue={editingAppointment.patientPhone ?? ""}
+                  className={inputClass}
+                />
               </div>
               <div>
                 <label className={labelClass}>OneDrive link (optional)</label>

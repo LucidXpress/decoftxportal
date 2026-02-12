@@ -27,6 +27,9 @@ export type DbAppointment = {
   status: AppointmentStatus;
   onedrive_link: string | null;
   internal_notes: string | null;
+  added_by: string | null;
+  patient_phone: string | null;
+  patient_email: string | null;
   created_at: string;
   updated_at: string;
   assigned_doctor_id: string | null;
@@ -55,6 +58,9 @@ export type Appointment = {
   status: AppointmentStatus;
   oneDriveLink: string | null;
   internalNotes: string | null;
+  addedBy: string | null;
+  patientPhone: string | null;
+  patientEmail: string | null;
   createdAt: string;
   updatedAt: string;
   assignedDoctorId: string | null;
@@ -88,6 +94,9 @@ export function dbAppointmentToAppointment(
     status: row.status,
     oneDriveLink: row.onedrive_link,
     internalNotes: row.internal_notes,
+    addedBy: row.added_by ?? null,
+    patientPhone: row.patient_phone ?? null,
+    patientEmail: row.patient_email ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     assignedDoctorId: row.assigned_doctor_id,
@@ -101,6 +110,9 @@ export function appointmentInsertToDb(data: {
   appointmentDate: Date;
   durationMinutes: number;
   examType: string;
+  addedBy: string;
+  patientPhone?: string | null;
+  patientEmail?: string | null;
   oneDriveLink?: string | null;
   internalNotes?: string | null;
   assignedDoctorId?: string | null;
@@ -110,6 +122,9 @@ export function appointmentInsertToDb(data: {
     appointment_date: data.appointmentDate.toISOString(),
     duration_minutes: data.durationMinutes,
     exam_type: data.examType,
+    added_by: data.addedBy.trim(),
+    patient_phone: data.patientPhone?.trim() || null,
+    patient_email: data.patientEmail?.trim() || null,
     onedrive_link: data.oneDriveLink ?? null,
     internal_notes: data.internalNotes ?? null,
     assigned_doctor_id: data.assignedDoctorId ?? null,
@@ -123,6 +138,8 @@ export function appointmentUpdateToDb(data: {
   durationMinutes?: number;
   examType?: string;
   status?: AppointmentStatus;
+  patientPhone?: string | null;
+  patientEmail?: string | null;
   oneDriveLink?: string | null;
   internalNotes?: string | null;
   assignedDoctorId?: string | null;
@@ -133,6 +150,8 @@ export function appointmentUpdateToDb(data: {
   if (data.durationMinutes != null) out.duration_minutes = data.durationMinutes;
   if (data.examType != null) out.exam_type = data.examType;
   if (data.status != null) out.status = data.status;
+  if (data.patientPhone !== undefined) out.patient_phone = data.patientPhone?.trim() || null;
+  if (data.patientEmail !== undefined) out.patient_email = data.patientEmail?.trim() || null;
   if (data.oneDriveLink !== undefined) out.onedrive_link = data.oneDriveLink || null;
   if (data.internalNotes !== undefined) out.internal_notes = data.internalNotes;
   if (data.assignedDoctorId !== undefined) out.assigned_doctor_id = data.assignedDoctorId;

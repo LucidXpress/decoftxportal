@@ -3,14 +3,21 @@ export function isPastDate(isoDate: string): boolean {
   return new Date(isoDate).getTime() < Date.now();
 }
 
-/** Basic URL check; empty string is valid (optional field). */
-export function isValidOptionalUrl(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) return true;
+const ALLOWED_URL_PROTOCOLS = ["https:", "http:"];
+
+/** Returns true if the URL is valid and uses an allowed protocol (http/https only; blocks javascript:, data:, etc.). */
+export function isAllowedUrl(url: string): boolean {
   try {
-    new URL(trimmed);
-    return true;
+    const u = new URL(url);
+    return ALLOWED_URL_PROTOCOLS.includes(u.protocol);
   } catch {
     return false;
   }
+}
+
+/** Optional URL check; empty string is valid. Only allows http/https to prevent javascript: or data: XSS. */
+export function isValidOptionalUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  return isAllowedUrl(trimmed);
 }

@@ -6,10 +6,13 @@ import type { Role } from "@/types/database";
 import bcrypt from "bcryptjs";
 
 if (process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET) {
-  throw new Error("AUTH_SECRET must be set in production.");
+  throw new Error(
+    "AUTH_SECRET must be set in production. Add it to .env.local (or your deployment env). Generate with: openssl rand -base64 32"
+  );
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET,
   providers: [
     Credentials({
       name: "Portal login",

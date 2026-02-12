@@ -2,16 +2,26 @@ import { auth } from "@/auth";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { dbAppointmentToAppointment, type DbAppointment } from "@/types/database";
+import { isAllowedUrl } from "@/lib/validation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const updateSchema = z.object({
   patientName: z.string().min(1).optional(),
+  patientPhone: z.string().optional().nullable().or(z.literal("")),
+  patientEmail: z.string().optional().nullable().or(z.literal("")).refine((v) => !v || v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "Invalid email"),
   appointmentDate: z.string().datetime().optional(),
   durationMinutes: z.number().int().min(5).max(480).optional(),
   examType: z.string().min(1).optional(),
   status: z.enum(["scheduled", "completed", "cancelled"]).optional(),
-  oneDriveLink: z.string().url().optional().nullable().or(z.literal("")),
+  oneDriveLink: z
+    .string()
+    .optional()
+    .nullable()
+    .or(z.literal(""))
+    .refine((v) => v === undefined || v === null || v === "" || isAllowedUrl(v), {
+      message: "URL must be https or http",
+    }),
   internalNotes: z.string().optional().nullable(),
   assignedDoctorId: z.string().optional().nullable(),
 });
@@ -59,6 +69,8 @@ export async function PATCH(
   if (data.durationMinutes != null) updatePayload.duration_minutes = data.durationMinutes;
   if (data.examType != null) updatePayload.exam_type = data.examType;
   if (data.status != null) updatePayload.status = data.status;
+  if (data.patientPhone !== undefined) updatePayload.patient_phone = (data.patientPhone && data.patientPhone.trim()) || null;
+  if (data.patientEmail !== undefined) updatePayload.patient_email = (data.patientEmail && data.patientEmail.trim()) || null;
   if (data.oneDriveLink !== undefined) updatePayload.onedrive_link = data.oneDriveLink || null;
   if (data.internalNotes !== undefined) updatePayload.internal_notes = data.internalNotes;
   if (data.assignedDoctorId !== undefined) updatePayload.assigned_doctor_id = data.assignedDoctorId;

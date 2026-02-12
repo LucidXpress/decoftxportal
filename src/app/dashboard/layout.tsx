@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/dashboard/actions";
 import Link from "next/link";
+import { DashboardNav } from "./DashboardNav";
 
 export default async function DashboardLayout({
   children,
@@ -12,6 +13,7 @@ export default async function DashboardLayout({
   if (!session?.user) redirect("/auth/signin");
 
   const role = (session.user as { role: string }).role;
+  const isReception = role === "reception";
 
   return (
     <div className="min-h-screen bg-[var(--dec-light-bg)]">
@@ -27,12 +29,13 @@ export default async function DashboardLayout({
             </span>
           </Link>
           <div className="flex items-center gap-4">
-            <span className="hidden text-sm text-white/85 sm:inline">
-              {session.user.name ?? session.user.email}
-            </span>
-            <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium capitalize text-white backdrop-blur-sm">
-              {role}
-            </span>
+            {isReception && <DashboardNav />}
+            <Link
+              href="/dashboard/settings"
+              className="rounded px-3 py-2 text-sm font-medium text-white/90 transition hover:bg-white/10 hover:text-white"
+            >
+              Settings
+            </Link>
             <form action={signOutAction}>
               <button
                 type="submit"

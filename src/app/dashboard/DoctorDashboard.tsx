@@ -17,6 +17,9 @@ type Appointment = {
   status: string;
   oneDriveLink: string | null;
   internalNotes: string | null;
+  addedBy: string | null;
+  patientPhone: string | null;
+  patientEmail: string | null;
   assignedDoctor: { id: string; name: string | null; email: string | null } | null;
 };
 
@@ -137,6 +140,11 @@ export function DoctorDashboard({
                 <p className="mt-2 text-sm text-[var(--dec-text)]">
                   {format(new Date(selectedEvent.start!), "EEEE, MMMM d, yyyy 'at' h:mm a")}
                 </p>
+                {selectedEvent.appointment.addedBy && (
+                  <p className="mt-1 text-sm text-[var(--dec-muted)]">
+                    Added by: {selectedEvent.appointment.addedBy}
+                  </p>
+                )}
                 {selectedEvent.appointment.internalNotes && (
                   <p className="mt-2 text-sm text-[var(--dec-muted)]">
                     {selectedEvent.appointment.internalNotes}
