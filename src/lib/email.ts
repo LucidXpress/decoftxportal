@@ -62,7 +62,11 @@ export async function sendAppointmentScheduledEmail(
     subject: `New appointment: ${payload.patientName} – ${payload.examType} (${dateStr})`,
     html,
   });
-  return !error;
+  if (error) {
+    console.error("[Email] Doctor appointment notification failed:", error.message);
+    return false;
+  }
+  return true;
 }
 
 export type PatientAppointmentConfirmationPayload = {
@@ -113,7 +117,11 @@ export async function sendPatientAppointmentConfirmationEmail(
     subject: `Appointment confirmed: ${payload.examType} – ${dateStr}`,
     html,
   });
-  return !error;
+  if (error) {
+    console.error("[Email] Patient confirmation failed:", error.message);
+    return false;
+  }
+  return true;
 }
 
 function escapeHtml(s: string): string {

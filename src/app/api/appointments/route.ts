@@ -20,10 +20,10 @@ const createSchema = z.object({
   patientPhone: z.string().optional().nullable().or(z.literal("")).transform((s) => (s && s.trim()) || null),
   patientEmail: z
     .string()
+    .email("Invalid email")
     .optional()
-    .or(z.literal(""))
-    .transform((s) => (s && s.trim()) || null)
-    .refine((v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "Invalid email"),
+    .nullable()
+    .transform((s) => (s && s.trim()) || null),
   appointmentDate: z.string().datetime(),
   durationMinutes: z.number().int().min(5).max(480).default(60),
   examType: z.string().min(1),
