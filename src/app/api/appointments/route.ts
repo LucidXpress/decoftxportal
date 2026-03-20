@@ -174,6 +174,13 @@ export async function POST(req: Request) {
 
   // SMS confirmation to patient when phone number is provided
   if (row.patient_phone) {
+    const digits = String(row.patient_phone).replace(/\D/g, "");
+    const last4 = digits.slice(-4);
+    const masked = last4 ? `***-***-${last4}` : "***";
+    console.info("[Appointment] Triggering SMS confirmation.", {
+      appointmentId: row.id,
+      to: masked,
+    });
     sendAppointmentConfirmationSms({
       to: row.patient_phone,
       patientName: row.patient_name,

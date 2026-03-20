@@ -30,7 +30,14 @@ export async function sendAppointmentConfirmationSms(params: {
   examType: string;
   practiceName?: string;
 }): Promise<boolean> {
-  if (!accountSid || !authToken || !fromNumber) return false;
+  if (!accountSid || !authToken || !fromNumber) {
+    console.warn("[SMS] Not configured (missing env vars).", {
+      hasAccountSid: !!accountSid,
+      hasAuthToken: !!authToken,
+      hasFromNumber: !!fromNumber,
+    });
+    return false;
+  }
   const dateStr = params.appointmentDate.toLocaleString("en-US", {
     weekday: "short",
     month: "short",
@@ -43,13 +50,24 @@ export async function sendAppointmentConfirmationSms(params: {
 
   try {
     const client = twilio(accountSid, authToken);
-    await client.messages.create({
+    const result = await client.messages.create({
       body,
       from: fromNumber,
       to: toE164(params.to),
     });
+    // Helpful for debugging deliveries; Twilio IDs aren't sensitive.
+    console.info("[SMS] Sent appointment confirmation.", {
+      to: toE164(params.to),
+      messageSid: result.sid,
+    });
     return true;
-  } catch {
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[SMS] Twilio message failed.", {
+      to: toE164(params.to),
+      from: fromNumber,
+      error: message,
+    });
     return false;
   }
 }
