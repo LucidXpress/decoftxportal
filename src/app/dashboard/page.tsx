@@ -24,7 +24,7 @@ export default async function DashboardPage() {
       .order("appointment_date", { ascending: true });
     const appointments = (rows ?? []) as DbAppointment[];
     const doctorIds = [...new Set(appointments.map((a) => a.assigned_doctor_id).filter(Boolean))] as string[];
-    let doctorsMap: Record<string, { id: string; name: string | null; email: string | null }> = {};
+    const doctorsMap: Record<string, { id: string; name: string | null; email: string | null }> = {};
     if (doctorIds.length > 0) {
       const { data: users } = await supabase.from("users").select("id, name, email").in("id", doctorIds);
       if (users) users.forEach((u) => (doctorsMap[u.id] = { id: u.id, name: u.name, email: u.email }));
@@ -46,7 +46,7 @@ export default async function DashboardPage() {
     .order("appointment_date", { ascending: true });
   const allAppointments = (appointmentRows ?? []) as DbAppointment[];
   const doctorIds = [...new Set(allAppointments.map((a) => a.assigned_doctor_id).filter(Boolean))] as string[];
-  let doctorsMap: Record<string, { id: string; name: string | null; email: string | null }> = {};
+  const doctorsMap: Record<string, { id: string; name: string | null; email: string | null }> = {};
   if (doctorIds.length > 0) {
     const { data: users } = await supabase.from("users").select("id, name, email").in("id", doctorIds);
     if (users) users.forEach((u) => (doctorsMap[u.id] = { id: u.id, name: u.name, email: u.email }));

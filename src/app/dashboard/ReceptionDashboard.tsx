@@ -15,6 +15,9 @@ type Appointment = {
   oneDriveLink: string | null;
   internalNotes: string | null;
   addedBy: string | null;
+  streetAddress: string | null;
+  city: string | null;
+  state: string | null;
   patientPhone: string | null;
   patientEmail: string | null;
   assignedDoctor: Doctor | null;
@@ -110,6 +113,9 @@ export function ReceptionDashboard({
     const form = e.currentTarget;
     const patientName = (form.elements.namedItem("patientName") as HTMLInputElement).value.trim();
     const addedBy = (form.elements.namedItem("addedBy") as HTMLInputElement).value.trim();
+    const streetAddressValue = (form.elements.namedItem("streetAddress") as HTMLInputElement).value.trim();
+    const cityValue = (form.elements.namedItem("city") as HTMLInputElement).value.trim();
+    const stateValue = (form.elements.namedItem("state") as HTMLInputElement).value.trim();
     const appointmentDateValue = (form.elements.namedItem("appointmentDate") as HTMLInputElement).value;
     const oneDriveLinkValue = (form.elements.namedItem("oneDriveLink") as HTMLInputElement).value.trim();
 
@@ -135,6 +141,9 @@ export function ReceptionDashboard({
       const data = {
         patientName,
         addedBy,
+        streetAddress: streetAddressValue || null,
+        city: cityValue || null,
+        state: stateValue || null,
         patientPhone: patientPhoneValue,
         patientEmail: patientEmailValue,
         appointmentDate: appointmentDate!.toISOString(),
@@ -177,6 +186,9 @@ export function ReceptionDashboard({
     setFormErrors({});
     const form = e.currentTarget;
     const patientName = (form.elements.namedItem("patientName") as HTMLInputElement).value.trim();
+    const streetAddressValue = (form.elements.namedItem("streetAddress") as HTMLInputElement).value.trim();
+    const cityValue = (form.elements.namedItem("city") as HTMLInputElement).value.trim();
+    const stateValue = (form.elements.namedItem("state") as HTMLInputElement).value.trim();
     const appointmentDateValue = (form.elements.namedItem("appointmentDate") as HTMLInputElement).value;
     const oneDriveLinkValue = (form.elements.namedItem("oneDriveLink") as HTMLInputElement).value.trim();
 
@@ -200,6 +212,9 @@ export function ReceptionDashboard({
       const patientEmailValue = (form.elements.namedItem("patientEmail") as HTMLInputElement)?.value.trim() || null;
       const data = {
         patientName,
+        streetAddress: streetAddressValue || null,
+        city: cityValue || null,
+        state: stateValue || null,
         appointmentDate: appointmentDate?.toISOString(),
         durationMinutes: parseInt(
           (form.elements.namedItem("durationMinutes") as HTMLInputElement).value,
@@ -423,6 +438,18 @@ export function ReceptionDashboard({
               <p className="mt-1 text-xs text-[var(--dec-muted)]">
                 Who is adding this appointment (for the team to see).
               </p>
+            </div>
+            <div className="sm:col-span-2">
+              <label className={labelClass}>Street address</label>
+              <input name="streetAddress" type="text" placeholder="123 Main St" className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>City</label>
+              <input name="city" type="text" placeholder="Austin" className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>State</label>
+              <input name="state" type="text" placeholder="TX" className={inputClass} />
             </div>
             <div>
               <label className={labelClass}>Date & time</label>
@@ -782,6 +809,23 @@ export function ReceptionDashboard({
                 {formErrors.patientName && (
                   <p className="mt-1 text-sm text-[var(--dec-error)]">{formErrors.patientName}</p>
                 )}
+              </div>
+              <div>
+                <label className={labelClass}>Street address</label>
+                <input
+                  name="streetAddress"
+                  type="text"
+                  defaultValue={editingAppointment.streetAddress ?? ""}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>City</label>
+                <input name="city" type="text" defaultValue={editingAppointment.city ?? ""} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>State</label>
+                <input name="state" type="text" defaultValue={editingAppointment.state ?? ""} className={inputClass} />
               </div>
               <div>
                 <label className={labelClass}>Date & time</label>

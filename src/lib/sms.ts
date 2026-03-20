@@ -29,6 +29,9 @@ export async function sendAppointmentConfirmationSms(params: {
   appointmentDate: Date;
   examType: string;
   practiceName?: string;
+  streetAddress?: string | null;
+  city?: string | null;
+  state?: string | null;
 }): Promise<boolean> {
   if (!accountSid || !authToken || !fromNumber) {
     console.warn("[SMS] Not configured (missing env vars).", {
@@ -46,7 +49,11 @@ export async function sendAppointmentConfirmationSms(params: {
     minute: "2-digit",
   });
   const practice = params.practiceName ?? "D.E.C. Of Texas";
-  const body = `Your appointment at ${practice} is confirmed: ${dateStr} – ${params.examType}. Reply with questions or call us.`;
+  const addressParts = [params.streetAddress, params.city, params.state].filter(
+    (p): p is string => !!p
+  );
+  const addressSnippet = addressParts.length ? ` Location: ${addressParts.join(", ")}.` : "";
+  const body = `Your appointment at ${practice} is confirmed: ${dateStr} – ${params.examType}.${addressSnippet} Reply with questions or call us.`;
 
   try {
     const client = twilio(accountSid, authToken);

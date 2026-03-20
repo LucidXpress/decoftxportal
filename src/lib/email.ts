@@ -22,6 +22,9 @@ export type AppointmentScheduledPayload = {
   addedBy: string;
   internalNotes: string | null;
   oneDriveLink: string | null;
+  streetAddress: string | null;
+  city: string | null;
+  state: string | null;
 };
 
 /**
@@ -44,6 +47,14 @@ export async function sendAppointmentScheduledEmail(
   const html = `
     <p>Hi${payload.doctorName ? ` ${payload.doctorName}` : ""},</p>
     <p>A new appointment has been scheduled and assigned to you.</p>
+    ${(() => {
+      const addressParts = [payload.streetAddress, payload.city, payload.state].filter(
+        (p): p is string => !!p
+      );
+      return addressParts.length
+        ? `<p><strong>Location:</strong> ${escapeHtml(addressParts.join(", "))}</p>`
+        : "";
+    })()}
     <ul>
       <li><strong>Patient:</strong> ${escapeHtml(payload.patientName)}</li>
       <li><strong>Date & time:</strong> ${escapeHtml(dateStr)}</li>
@@ -78,6 +89,9 @@ export type PatientAppointmentConfirmationPayload = {
   doctorName: string | null;
   oneDriveLink: string | null;
   practiceName?: string;
+  streetAddress: string | null;
+  city: string | null;
+  state: string | null;
 };
 
 /**
@@ -98,6 +112,8 @@ export async function sendPatientAppointmentConfirmationEmail(
     minute: "2-digit",
   });
   const practice = payload.practiceName ?? "D.E.C. Of Texas";
+  const addressParts = [payload.streetAddress, payload.city, payload.state].filter((p): p is string => !!p);
+  const addressSnippet = addressParts.length ? ` <li><strong>Location:</strong> ${escapeHtml(addressParts.join(", "))}</li>` : "";
   const html = `
     <p>Hi${payload.patientName ? ` ${escapeHtml(payload.patientName)}` : ""},</p>
     <p>Your appointment at ${escapeHtml(practice)} has been confirmed.</p>
@@ -106,8 +122,8 @@ export async function sendPatientAppointmentConfirmationEmail(
       <li><strong>Duration:</strong> ${payload.durationMinutes} minutes</li>
       <li><strong>Exam type:</strong> ${escapeHtml(payload.examType)}</li>
       ${payload.doctorName ? `<li><strong>Doctor:</strong> ${escapeHtml(payload.doctorName)}</li>` : ""}
+      ${addressSnippet}
     </ul>
-    ${payload.oneDriveLink ? `<p><strong>Records link:</strong> <a href="${escapeHtml(payload.oneDriveLink)}">${escapeHtml(payload.oneDriveLink)}</a></p>` : ""}
     <p>If you need to reschedule or have questions, please contact us.</p>
   `.trim();
 

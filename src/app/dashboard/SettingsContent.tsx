@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 const inputClass =
   "w-full max-w-xs rounded-[var(--dec-radius-sm)] border border-[var(--dec-border)] bg-white px-3 py-2.5 text-[var(--dec-text)] transition-[box-shadow,border-color] focus:border-[var(--dec-base)] focus:outline-none focus:ring-2 focus:ring-[var(--dec-base)]/20";
@@ -221,12 +222,12 @@ export function SettingsContent({ userName }: { userName: string }) {
                 </button>
               </>
             ) : (
-              <a
+              <Link
                 href="/api/auth/microsoft"
                 className="rounded-full bg-[var(--dec-base)] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--dec-base-hover)] hover:shadow"
               >
                 Connect Outlook
-              </a>
+              </Link>
             )}
           </div>
         ) : (

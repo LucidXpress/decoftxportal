@@ -17,6 +17,24 @@ import { z } from "zod";
 const createSchema = z.object({
   patientName: z.string().min(1),
   addedBy: z.string().min(1, "Added by is required").transform((s) => s.trim()),
+  streetAddress: z
+    .string()
+    .optional()
+    .nullable()
+    .or(z.literal(""))
+    .transform((s) => (s && s.trim()) || null),
+  city: z
+    .string()
+    .optional()
+    .nullable()
+    .or(z.literal(""))
+    .transform((s) => (s && s.trim()) || null),
+  state: z
+    .string()
+    .optional()
+    .nullable()
+    .or(z.literal(""))
+    .transform((s) => (s && s.trim()) || null),
   patientPhone: z.string().optional().nullable().or(z.literal("")).transform((s) => (s && s.trim()) || null),
   patientEmail: z
     .string()
@@ -58,7 +76,7 @@ export async function GET() {
 
   const appointments = (rows ?? []) as DbAppointment[];
   const doctorIds = [...new Set(appointments.map((a) => a.assigned_doctor_id).filter(Boolean))] as string[];
-  let doctorsMap: Record<string, { id: string; name: string | null; email: string | null }> = {};
+  const doctorsMap: Record<string, { id: string; name: string | null; email: string | null }> = {};
   if (doctorIds.length > 0) {
     const { data: users } = await supabase.from("users").select("id, name, email").in("id", doctorIds);
     if (users) users.forEach((u) => (doctorsMap[u.id] = { id: u.id, name: u.name, email: u.email }));
@@ -108,6 +126,9 @@ export async function POST(req: Request) {
   const insertPayload = appointmentInsertToDb({
     patientName: data.patientName,
     addedBy: data.addedBy,
+    streetAddress: data.streetAddress,
+    city: data.city,
+    state: data.state,
     patientPhone: data.patientPhone ?? null,
     patientEmail: data.patientEmail ?? null,
     appointmentDate,
@@ -135,6 +156,8 @@ export async function POST(req: Request) {
     row.internal_notes && `Notes: ${row.internal_notes}`,
     row.added_by && `Added by: ${row.added_by}`,
     row.onedrive_link && `OneDrive: ${row.onedrive_link}`,
+    row.street_address &&
+      `Address: ${row.street_address}${row.city ? `, ${row.city}` : ""}${row.state ? `, ${row.state}` : ""}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -156,6 +179,9 @@ export async function POST(req: Request) {
       addedBy: row.added_by ?? "—",
       internalNotes: row.internal_notes,
       oneDriveLink: row.onedrive_link,
+      streetAddress: row.street_address,
+      city: row.city,
+      state: row.state,
     }).catch(() => {});
   }
 
@@ -169,6 +195,9 @@ export async function POST(req: Request) {
       examType: row.exam_type,
       doctorName: doctor?.name ?? null,
       oneDriveLink: row.onedrive_link,
+      streetAddress: row.street_address,
+      city: row.city,
+      state: row.state,
     }).catch(() => {});
   }
 
@@ -186,6 +215,9 @@ export async function POST(req: Request) {
       patientName: row.patient_name,
       appointmentDate: start,
       examType: row.exam_type,
+      streetAddress: row.street_address,
+      city: row.city,
+      state: row.state,
     }).catch(() => {});
   }
 

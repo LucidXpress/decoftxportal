@@ -10,6 +10,9 @@ const updateSchema = z.object({
   patientName: z.string().min(1).optional(),
   patientPhone: z.string().optional().nullable().or(z.literal("")),
   patientEmail: z.string().optional().nullable().or(z.literal("")).refine((v) => !v || v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), "Invalid email"),
+  streetAddress: z.string().optional().nullable().or(z.literal("")).transform((s) => (s && s.trim()) || null),
+  city: z.string().optional().nullable().or(z.literal("")).transform((s) => (s && s.trim()) || null),
+  state: z.string().optional().nullable().or(z.literal("")).transform((s) => (s && s.trim()) || null),
   appointmentDate: z.string().datetime().optional(),
   durationMinutes: z.number().int().min(5).max(480).optional(),
   examType: z.string().min(1).optional(),
@@ -69,6 +72,9 @@ export async function PATCH(
   if (data.durationMinutes != null) updatePayload.duration_minutes = data.durationMinutes;
   if (data.examType != null) updatePayload.exam_type = data.examType;
   if (data.status != null) updatePayload.status = data.status;
+  if (data.streetAddress !== undefined) updatePayload.street_address = data.streetAddress;
+  if (data.city !== undefined) updatePayload.city = data.city;
+  if (data.state !== undefined) updatePayload.state = data.state;
   if (data.patientPhone !== undefined) updatePayload.patient_phone = (data.patientPhone && data.patientPhone.trim()) || null;
   if (data.patientEmail !== undefined) updatePayload.patient_email = (data.patientEmail && data.patientEmail.trim()) || null;
   if (data.oneDriveLink !== undefined) updatePayload.onedrive_link = data.oneDriveLink || null;
