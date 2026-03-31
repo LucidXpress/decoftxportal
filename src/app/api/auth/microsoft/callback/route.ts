@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createOutlookEvent } from "@/lib/outlook";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
@@ -84,6 +85,46 @@ export async function GET(req: Request) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", session.user.id);
+
+  // Backfill existing upcoming appointments to Outlook on initial connect/reconnect.
+  // This is best-effort: we keep connect success even if some event syncs fail.
+  try {
+    const role = (session.user as { role?: string }).role ?? "reception";
+    const nowIso = new Date().toISOString();
+    let query = supabase
+      .from("appointments")
+      .select("id, patient_name, exam_type, appointment_date, duration_minutes, internal_notes, added_by, onedrive_link, street_address, city, state, assigned_doctor_id, status")
+      .gte("appointment_date", nowIso)
+      .neq("status", "cancelled")
+      .order("appointment_date", { ascending: true });
+    if (role === "doctor") {
+      query = query.eq("assigned_doctor_id", session.user.id);
+    }
+    const { data: rows } = await query;
+    for (const row of rows ?? []) {
+      const start = new Date(row.appointment_date);
+      const end = new Date(start.getTime() + row.duration_minutes * 60 * 1000);
+      const subject = `${row.patient_name} – ${row.exam_type}`;
+      const body = [
+        row.internal_notes && `Notes: ${row.internal_notes}`,
+        row.added_by && `Added by: ${row.added_by}`,
+        row.onedrive_link && `OneDrive: ${row.onedrive_link}`,
+        row.street_address &&
+          `Address: ${row.street_address}${row.city ? `, ${row.city}` : ""}${row.state ? `, ${row.state}` : ""}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      await createOutlookEvent(session.user.id, { subject, start, end, body: body || undefined });
+    }
+    console.info("[Outlook] Backfilled existing appointments after connect.", {
+      userId: session.user.id,
+      count: (rows ?? []).length,
+      role,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[Outlook] Backfill after connect failed.", { userId: session.user.id, error: message });
+  }
 
   settingsUrl.searchParams.set("outlook", "connected");
   return NextResponse.redirect(settingsUrl);

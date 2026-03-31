@@ -4,9 +4,17 @@
  */
 
 import { Resend } from "resend";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromAddress = process.env.EMAIL_FROM ?? "D.E.C. Portal <onboarding@resend.dev>";
+const claimantPacketFilePath =
+  process.env.CLAIMANT_PACKET_FILE_PATH ??
+  path.join(process.cwd(), "public", "Dec Of Texas Claimant Packet.pdf");
+const claimantPacketFilename =
+  process.env.CLAIMANT_PACKET_FILENAME ?? "Dec Of Texas Claimant Packet.pdf";
+let claimantPacketAttachmentCache: { filename: string; content: string } | null | undefined;
 
 export function isEmailConfigured(): boolean {
   return !!resendApiKey;
@@ -126,18 +134,40 @@ export async function sendPatientAppointmentConfirmationEmail(
     </ul>
     <p>If you need to reschedule or have questions, please contact us.</p>
   `.trim();
+  const claimantPacketAttachment = await getClaimantPacketAttachment();
 
   const { error } = await resend.emails.send({
     from: fromAddress,
     to: [payload.patientEmail],
     subject: `Appointment confirmed: ${payload.examType} – ${dateStr}`,
     html,
+    attachments: claimantPacketAttachment ? [claimantPacketAttachment] : undefined,
   });
   if (error) {
     console.error("[Email] Patient confirmation failed:", error.message);
     return false;
   }
   return true;
+}
+
+async function getClaimantPacketAttachment(): Promise<{ filename: string; content: string } | null> {
+  if (claimantPacketAttachmentCache !== undefined) return claimantPacketAttachmentCache;
+  try {
+    const raw = await readFile(claimantPacketFilePath);
+    claimantPacketAttachmentCache = {
+      filename: claimantPacketFilename,
+      content: raw.toString("base64"),
+    };
+    return claimantPacketAttachmentCache;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Email] Claimant packet attachment could not be loaded.", {
+      path: claimantPacketFilePath,
+      error: message,
+    });
+    claimantPacketAttachmentCache = null;
+    return null;
+  }
 }
 
 function escapeHtml(s: string): string {
