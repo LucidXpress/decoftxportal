@@ -2,13 +2,10 @@ import { auth } from "@/auth";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 
 const createDoctorSchema = z.object({
   name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email").transform((s) => s.trim().toLowerCase()),
-  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 export async function GET() {
@@ -59,16 +56,11 @@ export async function POST(req: Request) {
     const message = Object.values(first).flat().join(" ") || "Validation failed";
     return NextResponse.json({ error: message }, { status: 400 });
   }
-  const { name, email, password } = parsed.data;
+  const { name } = parsed.data;
   const supabase = await createClient();
-  const { data: existing } = await supabase.from("users").select("id").eq("email", email).maybeSingle();
-  if (existing) {
-    return NextResponse.json({ error: "A user with this email already exists." }, { status: 409 });
-  }
-  const hashed = bcrypt.hashSync(password, 10);
   const { data: created, error } = await supabase
     .from("users")
-    .insert({ name, email, password: hashed, role: "doctor" })
+    .insert({ name, role: "doctor", email: null, password: null })
     .select("id, name, email")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

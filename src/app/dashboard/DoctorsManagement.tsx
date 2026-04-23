@@ -52,15 +52,8 @@ export function DoctorsManagement({
     setAddErrors({});
     const form = e.currentTarget;
     const name = (form.elements.namedItem("addName") as HTMLInputElement).value.trim();
-    const email = (form.elements.namedItem("addEmail") as HTMLInputElement).value.trim().toLowerCase();
-    const password = (form.elements.namedItem("addPassword") as HTMLInputElement).value;
-    const confirm = (form.elements.namedItem("addConfirmPassword") as HTMLInputElement).value;
     const err: Record<string, string> = {};
     if (!name) err.addName = "Name is required.";
-    if (!email) err.addEmail = "Email is required.";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) err.addEmail = "Please enter a valid email.";
-    if (password.length < 8) err.addPassword = "Password must be at least 8 characters.";
-    if (password !== confirm) err.addConfirmPassword = "Passwords do not match.";
     if (Object.keys(err).length) {
       setAddErrors(err);
       return;
@@ -70,7 +63,7 @@ export function DoctorsManagement({
       const res = await fetch("/api/doctors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -79,7 +72,7 @@ export function DoctorsManagement({
       }
       setShowAdd(false);
       form.reset();
-      showToast("Doctor added. They can sign in with this email and password.");
+      showToast("Doctor added.");
       router.refresh();
     } finally {
       setLoadingAdd(false);
@@ -91,29 +84,18 @@ export function DoctorsManagement({
     setEditErrors({});
     const form = e.currentTarget;
     const name = (form.elements.namedItem("editName") as HTMLInputElement).value.trim();
-    const email = (form.elements.namedItem("editEmail") as HTMLInputElement).value.trim().toLowerCase();
-    const password = (form.elements.namedItem("editPassword") as HTMLInputElement).value;
-    const confirm = (form.elements.namedItem("editConfirmPassword") as HTMLInputElement).value;
     const err: Record<string, string> = {};
     if (!name) err.editName = "Name is required.";
-    if (!email) err.editEmail = "Email is required.";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) err.editEmail = "Please enter a valid email.";
-    if (password.length > 0) {
-      if (password.length < 8) err.editPassword = "Password must be at least 8 characters.";
-      else if (password !== confirm) err.editConfirmPassword = "Passwords do not match.";
-    }
     if (Object.keys(err).length) {
       setEditErrors(err);
       return;
     }
     setLoadingEditId(doctor.id);
     try {
-      const body: { name: string; email: string; password?: string } = { name, email };
-      if (password) body.password = password;
       const res = await fetch(`/api/doctors/${doctor.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ name }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -164,7 +146,7 @@ export function DoctorsManagement({
       </div>
 
       <p className="mb-6 text-sm text-[var(--dec-muted)]">
-        Manage doctor logins. New doctors can sign in with the email and password you set. Appointments can be assigned to them from the Appointments page.
+        Manage assignable doctors. Add a doctor name here so they can be selected when creating an appointment.
       </p>
 
       {doctors.length === 0 ? (
@@ -187,7 +169,6 @@ export function DoctorsManagement({
             >
               <div>
                 <p className="font-medium text-[var(--dec-text)]">{d.name ?? "—"}</p>
-                <p className="text-sm text-[var(--dec-muted)]">{d.email ?? "—"}</p>
               </div>
               <div className="flex gap-2">
                 <button
@@ -247,53 +228,6 @@ export function DoctorsManagement({
                 />
                 {addErrors.addName && (
                   <p className="mt-1 text-sm text-[var(--dec-error)]">{addErrors.addName}</p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="addEmail" className={labelClass}>Email (sign-in)</label>
-                <input
-                  id="addEmail"
-                  name="addEmail"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  className={addErrors.addEmail ? inputErrorClass : inputClass}
-                  aria-invalid={!!addErrors.addEmail}
-                />
-                {addErrors.addEmail && (
-                  <p className="mt-1 text-sm text-[var(--dec-error)]">{addErrors.addEmail}</p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="addPassword" className={labelClass}>Password</label>
-                <input
-                  id="addPassword"
-                  name="addPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                  className={addErrors.addPassword ? inputErrorClass : inputClass}
-                  aria-invalid={!!addErrors.addPassword}
-                />
-                {addErrors.addPassword && (
-                  <p className="mt-1 text-sm text-[var(--dec-error)]">{addErrors.addPassword}</p>
-                )}
-                <p className="mt-1 text-xs text-[var(--dec-muted)]">At least 8 characters.</p>
-              </div>
-              <div>
-                <label htmlFor="addConfirmPassword" className={labelClass}>Confirm password</label>
-                <input
-                  id="addConfirmPassword"
-                  name="addConfirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  className={addErrors.addConfirmPassword ? inputErrorClass : inputClass}
-                  aria-invalid={!!addErrors.addConfirmPassword}
-                />
-                {addErrors.addConfirmPassword && (
-                  <p className="mt-1 text-sm text-[var(--dec-error)]">{addErrors.addConfirmPassword}</p>
                 )}
               </div>
               <div className="mt-2 flex flex-wrap gap-3">
@@ -356,51 +290,6 @@ export function DoctorsManagement({
                   <p className="mt-1 text-sm text-[var(--dec-error)]">{editErrors.editName}</p>
                 )}
               </div>
-              <div>
-                <label htmlFor="editEmail" className={labelClass}>Email (sign-in)</label>
-                <input
-                  id="editEmail"
-                  name="editEmail"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  defaultValue={editing.email ?? ""}
-                  className={editErrors.editEmail ? inputErrorClass : inputClass}
-                  aria-invalid={!!editErrors.editEmail}
-                />
-                {editErrors.editEmail && (
-                  <p className="mt-1 text-sm text-[var(--dec-error)]">{editErrors.editEmail}</p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="editPassword" className={labelClass}>New password (leave blank to keep current)</label>
-                <input
-                  id="editPassword"
-                  name="editPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  className={editErrors.editPassword ? inputErrorClass : inputClass}
-                  aria-invalid={!!editErrors.editPassword}
-                />
-                {editErrors.editPassword && (
-                  <p className="mt-1 text-sm text-[var(--dec-error)]">{editErrors.editPassword}</p>
-                )}
-                <p className="mt-1 text-xs text-[var(--dec-muted)]">At least 8 characters if changing.</p>
-              </div>
-              <div>
-                <label htmlFor="editConfirmPassword" className={labelClass}>Confirm new password</label>
-                <input
-                  id="editConfirmPassword"
-                  name="editConfirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  className={editErrors.editConfirmPassword ? inputErrorClass : inputClass}
-                  aria-invalid={!!editErrors.editConfirmPassword}
-                />
-                {editErrors.editConfirmPassword && (
-                  <p className="mt-1 text-sm text-[var(--dec-error)]">{editErrors.editConfirmPassword}</p>
-                )}
-              </div>
               <div className="mt-2 flex flex-wrap gap-3">
                 <button
                   type="submit"
@@ -440,7 +329,7 @@ export function DoctorsManagement({
               Remove this doctor?
             </h2>
             <p className="mt-2 text-sm text-[var(--dec-muted)]">
-              They will no longer be able to sign in. Appointments assigned to them will be unassigned (no appointment data is deleted).
+              Appointments assigned to them will be unassigned (no appointment data is deleted).
             </p>
             <div className="mt-6 flex gap-3">
               <button

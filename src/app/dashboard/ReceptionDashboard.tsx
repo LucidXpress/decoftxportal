@@ -147,10 +147,6 @@ export function ReceptionDashboard({
         patientPhone: patientPhoneValue,
         patientEmail: patientEmailValue,
         appointmentDate: appointmentDate!.toISOString(),
-        durationMinutes: parseInt(
-          (form.elements.namedItem("durationMinutes") as HTMLInputElement).value,
-          10
-        ),
         examType: (form.elements.namedItem("examType") as HTMLInputElement).value,
         oneDriveLink: oneDriveLinkValue || undefined,
         internalNotes: (form.elements.namedItem("internalNotes") as HTMLInputElement).value.trim() || undefined,
@@ -468,10 +464,6 @@ export function ReceptionDashboard({
               )}
             </div>
             <div>
-              <label className={labelClass}>Duration (minutes)</label>
-              <input name="durationMinutes" type="number" min={5} max={480} defaultValue={60} className={inputClass} />
-            </div>
-            <div>
               <label className={labelClass}>Exam type</label>
               <input name="examType" required className={inputClass} />
             </div>
@@ -480,12 +472,12 @@ export function ReceptionDashboard({
               <select name="assignedDoctorId" className={inputClass}>
                 <option value="">— Select —</option>
                 {doctors.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name ?? d.email}</option>
+                  <option key={d.id} value={d.id}>{d.name ?? "Unnamed doctor"}</option>
                 ))}
               </select>
               {doctors.length === 0 && (
                 <p className="mt-1 text-xs text-[var(--dec-muted)]">
-                  No doctors yet. Go to <strong>Doctors</strong> in the header to add doctor logins.
+                  No doctors yet. Go to <strong>Doctors</strong> in the header to add one.
                 </p>
               )}
             </div>
@@ -651,7 +643,7 @@ export function ReceptionDashboard({
                   </p>
                   <p className="text-sm text-[var(--dec-text)]">{apt.examType}</p>
                   <p className="text-sm text-[var(--dec-muted)]">
-                    Doctor: {apt.assignedDoctor?.name ?? apt.assignedDoctor?.email ?? "—"}
+                    Doctor: {apt.assignedDoctor?.name ?? "—"}
                   </p>
                   <p className="text-sm text-[var(--dec-muted)]">
                     Added by: {apt.addedBy ?? "—"}
@@ -884,7 +876,7 @@ export function ReceptionDashboard({
                 >
                   <option value="">— No doctor —</option>
                   {doctors.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name ?? d.email}</option>
+                    <option key={d.id} value={d.id}>{d.name ?? "Unnamed doctor"}</option>
                   ))}
                 </select>
               </div>

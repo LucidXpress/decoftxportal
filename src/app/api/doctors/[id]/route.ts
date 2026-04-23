@@ -2,13 +2,10 @@ import { auth } from "@/auth";
 import { createClient } from "@/lib/supabase/server";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 
 const updateDoctorSchema = z.object({
   name: z.string().min(1).optional(),
-  email: z.string().email("Invalid email").transform((s) => s.trim().toLowerCase()).optional(),
-  password: z.string().min(8, "Password must be at least 8 characters").optional(),
 });
 
 export async function PATCH(
@@ -52,21 +49,6 @@ export async function PATCH(
   }
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (parsed.data.name != null) updates.name = parsed.data.name;
-  if (parsed.data.email != null) {
-    const { data: emailTaken } = await supabase
-      .from("users")
-      .select("id")
-      .eq("email", parsed.data.email)
-      .neq("id", id)
-      .maybeSingle();
-    if (emailTaken) {
-      return NextResponse.json({ error: "A user with this email already exists." }, { status: 409 });
-    }
-    updates.email = parsed.data.email;
-  }
-  if (parsed.data.password != null) {
-    updates.password = bcrypt.hashSync(parsed.data.password, 10);
-  }
   const { data: updated, error } = await supabase
     .from("users")
     .update(updates)
