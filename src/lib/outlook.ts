@@ -77,6 +77,7 @@ export type OutlookEventInput = {
   start: Date;
   end: Date;
   body?: string;
+  categories?: string[];
 };
 
 /** Create a calendar event in the user's Outlook calendar. Returns event id or null. */
@@ -106,6 +107,7 @@ export async function createOutlookEvent(
       body: event.body
         ? { contentType: "text", content: event.body }
         : undefined,
+      categories: event.categories?.filter((c) => c.trim().length > 0),
     }),
   });
   if (!res.ok) return null;

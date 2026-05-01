@@ -1,10 +1,37 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Toast } from "./Toast";
 import { isPastDate, isValidOptionalUrl } from "@/lib/validation";
 
 type Doctor = { id: string; name: string | null; email: string | null };
+type SavedAddress = { id: string; streetAddress: string; city: string; state: string };
+type SavedExamType = { id: string; name: string };
+type CreateAppointmentPayload = {
+  patientName: string;
+  addedBy: string;
+  streetAddress: string | null;
+  city: string | null;
+  state: string | null;
+  patientPhone: string | null;
+  patientEmail: string | null;
+  appointmentDate: string;
+  examType: string;
+  oneDriveLink?: string;
+  internalNotes?: string;
+  assignedDoctorId: string | null;
+  allowDuplicate?: boolean;
+};
+type DuplicateWarning = {
+  id: string;
+  patientName: string;
+  appointmentDate: string;
+  streetAddress: string | null;
+  city: string | null;
+  state: string | null;
+  doctorName: string | null;
+};
 type Appointment = {
   id: string;
   patientName: string;
@@ -23,46 +50,90 @@ type Appointment = {
   assignedDoctor: Doctor | null;
 };
 
-function toDateTimeLocal(d: Date): string {
+function snapDateToQuarterHour(date: Date): Date {
+  const snapped = new Date(date);
+  const minutes = snapped.getMinutes();
+  const remainder = minutes % 15;
+  if (remainder >= 8) {
+    snapped.setMinutes(minutes + (15 - remainder), 0, 0);
+  } else {
+    snapped.setMinutes(minutes - remainder, 0, 0);
+  }
+  return snapped;
+}
+
+function toDateInputValue(d: Date): string {
   const date = new Date(d);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+function toTimeInputValue(d: Date): string {
+  const date = new Date(d);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function endOfToday(): Date {
-  const d = new Date();
-  d.setHours(23, 59, 59, 999);
-  return d;
+function formatTimeLabel(value: string): string {
+  const [h, m] = value.split(":").map(Number);
+  const hour12 = h % 12 || 12;
+  const meridiem = h >= 12 ? "PM" : "AM";
+  return `${hour12}:${String(m).padStart(2, "0")} ${meridiem}`;
 }
 
 type StatusFilter = "all" | "scheduled" | "completed" | "cancelled";
-type DateFilter = "all" | "today";
+const ADD_ADDRESS_OPTION = "__add_new_address__";
+const ADD_EXAM_TYPE_OPTION = "__add_new_exam_type__";
+const QUARTER_HOUR_TIMES = Array.from({ length: (18 - 8) * 4 + 1 }, (_, i) => {
+  const totalMinutes = 8 * 60 + i * 15;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+});
 
 export function ReceptionDashboard({
   appointments: initialAppointments,
   doctors,
+  savedAddresses: initialSavedAddresses,
+  savedExamTypes: initialSavedExamTypes,
 }: {
   appointments: Appointment[];
   doctors: Doctor[];
+  savedAddresses: SavedAddress[];
+  savedExamTypes: SavedExamType[];
 }) {
+  const router = useRouter();
   const [appointments, setAppointments] = useState(initialAppointments);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>(initialSavedAddresses);
+  const [savedExamTypes, setSavedExamTypes] = useState<SavedExamType[]>(initialSavedExamTypes);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [selectedExamTypeId, setSelectedExamTypeId] = useState("");
+  const [streetAddress, setStreetAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingCreate, setLoadingCreate] = useState(false);
+  const [loadingAddAddress, setLoadingAddAddress] = useState(false);
+  const [loadingAddExamType, setLoadingAddExamType] = useState(false);
   const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
   const [loadingStatusId, setLoadingStatusId] = useState<string | null>(null);
+  const [loadingDeleteId, setLoadingDeleteId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showAddAddress, setShowAddAddress] = useState(false);
+  const [showAddExamType, setShowAddExamType] = useState(false);
   const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [selectedDateFilter, setSelectedDateFilter] = useState("");
+  const [doctorFilterId, setDoctorFilterId] = useState("all");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [addAddressErrors, setAddAddressErrors] = useState<Record<string, string>>({});
+  const [addExamTypeErrors, setAddExamTypeErrors] = useState<Record<string, string>>({});
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarning | null>(null);
+  const [pendingCreatePayload, setPendingCreatePayload] = useState<CreateAppointmentPayload | null>(null);
+  const [creatingDuplicateOverride, setCreatingDuplicateOverride] = useState(false);
   const editModalRef = useRef<HTMLDivElement>(null);
   const editTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -80,6 +151,43 @@ export function ReceptionDashboard({
     if (editingId) setFormErrors({});
   }, [editingId]);
 
+  useEffect(() => {
+    setSavedAddresses(initialSavedAddresses);
+  }, [initialSavedAddresses]);
+
+  useEffect(() => {
+    setSavedExamTypes(initialSavedExamTypes);
+  }, [initialSavedExamTypes]);
+
+  const applySavedAddress = (addressId: string) => {
+    if (addressId === ADD_ADDRESS_OPTION) {
+      setAddAddressErrors({});
+      setShowAddAddress(true);
+      return;
+    }
+    setSelectedAddressId(addressId);
+    if (!addressId) {
+      setStreetAddress("");
+      setCity("");
+      setState("");
+      return;
+    }
+    const selected = savedAddresses.find((address) => address.id === addressId);
+    if (!selected) return;
+    setStreetAddress(selected.streetAddress ?? "");
+    setCity(selected.city ?? "");
+    setState(selected.state ?? "");
+  };
+
+  const applySavedExamType = (examTypeId: string) => {
+    if (examTypeId === ADD_EXAM_TYPE_OPTION) {
+      setAddExamTypeErrors({});
+      setShowAddExamType(true);
+      return;
+    }
+    setSelectedExamTypeId(examTypeId);
+  };
+
   const formatDate = (d: string | Date) =>
     new Date(d).toLocaleString("en-US", {
       weekday: "short",
@@ -89,6 +197,14 @@ export function ReceptionDashboard({
       minute: "2-digit",
     });
 
+  const escapeHtml = (value: string) =>
+    value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
   const filteredAppointments = useMemo(() => {
     let list = appointments;
     if (statusFilter !== "all") list = list.filter((a) => a.status === statusFilter);
@@ -96,16 +212,131 @@ export function ReceptionDashboard({
       const q = searchQuery.trim().toLowerCase();
       list = list.filter((a) => a.patientName.toLowerCase().includes(q));
     }
-    if (dateFilter === "today") {
-      const start = startOfToday().getTime();
-      const end = endOfToday().getTime();
+    if (doctorFilterId !== "all") {
+      list = list.filter((a) => a.assignedDoctor?.id === doctorFilterId);
+    }
+    if (selectedDateFilter) {
       list = list.filter((a) => {
-        const t = new Date(a.appointmentDate).getTime();
-        return t >= start && t <= end;
+        const d = new Date(a.appointmentDate);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}` === selectedDateFilter;
       });
     }
     return list;
-  }, [appointments, statusFilter, searchQuery, dateFilter]);
+  }, [appointments, statusFilter, searchQuery, selectedDateFilter, doctorFilterId]);
+
+  const handleDownloadSchedule = () => {
+    const listed = [...filteredAppointments].sort(
+      (a, b) => new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime()
+    );
+    if (listed.length === 0) {
+      showToast("No appointments to export.");
+      return;
+    }
+
+    const doctorTitle =
+      doctorFilterId === "all"
+        ? "ALL DOCTORS"
+        : (doctors.find((d) => d.id === doctorFilterId)?.name ?? "SELECTED DOCTOR").toUpperCase();
+    const headerDateSource =
+      selectedDateFilter && selectedDateFilter.length > 0
+        ? new Date(`${selectedDateFilter}T00:00:00`)
+        : new Date(listed[0].appointmentDate);
+    const dateTitle = headerDateSource
+      .toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })
+      .toUpperCase();
+    const cityValues = Array.from(new Set(listed.map((apt) => (apt.city ?? "").trim()).filter(Boolean)));
+    const locationTitle = (cityValues.length === 1 ? cityValues[0] : "MULTIPLE LOCATIONS").toUpperCase();
+    const titleLine = `${dateTitle} \u2014 ${doctorTitle} \u2014 ${locationTitle}`;
+
+    const rowsHtml = listed
+      .map((apt) => {
+        const timeLabel = new Date(apt.appointmentDate).toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+        return `
+          <div style="display:flex;gap:26px;margin:0 0 14px 0;font-size:36px;line-height:1.2;">
+            <span style="min-width:170px;display:inline-block;">${escapeHtml(timeLabel)}</span>
+            <span>${escapeHtml(apt.patientName).toUpperCase()}</span>
+          </div>
+        `;
+      })
+      .join("");
+
+    const htmlDoc = `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Appointment Schedule</title>
+        </head>
+        <body style="font-family:Arial,sans-serif;color:#111827;margin:0;padding:70px 85px 80px 85px;">
+          <h1 style="margin:0 0 40px 0;font-size:30px;line-height:1.2;font-weight:700;text-decoration:underline;letter-spacing:0.2px;">
+            ${escapeHtml(titleLine)}
+          </h1>
+          <div>
+            ${rowsHtml}
+          </div>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlDoc], { type: "application/msword;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeDate = selectedDateFilter || new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `appointment-schedule-${safeDate}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const finishCreateSuccess = (created: Appointment) => {
+    setAppointments((prev) =>
+      [...prev, created].sort(
+        (a, b) =>
+          new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime()
+      )
+    );
+    setShowForm(false);
+    setSelectedAddressId("");
+    setSelectedExamTypeId("");
+    setStreetAddress("");
+    setCity("");
+    setState("");
+    setPendingCreatePayload(null);
+    setDuplicateWarning(null);
+    showToast("Appointment created.");
+  };
+
+  const createAppointment = async (payload: CreateAppointmentPayload) => {
+    const res = await fetch("/api/appointments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      if (res.status === 409 && body.code === "DUPLICATE_APPOINTMENT") {
+        setPendingCreatePayload(payload);
+        setDuplicateWarning((body.duplicate as DuplicateWarning) ?? null);
+        return;
+      }
+      setFormErrors({ form: (body.error as string) ?? "Failed to create appointment." });
+      return;
+    }
+
+    finishCreateSuccess(body as Appointment);
+  };
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -113,67 +344,161 @@ export function ReceptionDashboard({
     const form = e.currentTarget;
     const patientName = (form.elements.namedItem("patientName") as HTMLInputElement).value.trim();
     const addedBy = (form.elements.namedItem("addedBy") as HTMLInputElement).value.trim();
-    const streetAddressValue = (form.elements.namedItem("streetAddress") as HTMLInputElement).value.trim();
-    const cityValue = (form.elements.namedItem("city") as HTMLInputElement).value.trim();
-    const stateValue = (form.elements.namedItem("state") as HTMLInputElement).value.trim();
-    const appointmentDateValue = (form.elements.namedItem("appointmentDate") as HTMLInputElement).value;
+    const streetAddressValue = streetAddress.trim();
+    const cityValue = city.trim();
+    const stateValue = state.trim();
+    const appointmentDateDayValue = (form.elements.namedItem("appointmentDateDay") as HTMLInputElement).value;
+    const appointmentTimeValue = (form.elements.namedItem("appointmentTime") as HTMLSelectElement).value;
     const oneDriveLinkValue = (form.elements.namedItem("oneDriveLink") as HTMLInputElement).value.trim();
 
     const errors: Record<string, string> = {};
     if (!patientName) errors.patientName = "Patient name is required.";
     if (!addedBy) errors.addedBy = "Added by is required.";
-    const appointmentDate = appointmentDateValue ? new Date(appointmentDateValue) : null;
+    const appointmentDate =
+      appointmentDateDayValue && appointmentTimeValue
+        ? new Date(`${appointmentDateDayValue}T${appointmentTimeValue}`)
+        : null;
     if (appointmentDate && isPastDate(appointmentDate.toISOString())) {
       errors.appointmentDate = "Date & time cannot be in the past.";
     }
     if (oneDriveLinkValue && !isValidOptionalUrl(oneDriveLinkValue)) {
       errors.oneDriveLink = "Please enter a valid URL.";
     }
+    if (!selectedExamTypeId) {
+      errors.examType = "Exam type is required.";
+    }
     if (Object.keys(errors).length) {
       setFormErrors(errors);
       return;
     }
 
+    const patientPhoneValue = (form.elements.namedItem("patientPhone") as HTMLInputElement)?.value.trim() || null;
+    const patientEmailValue = (form.elements.namedItem("patientEmail") as HTMLInputElement)?.value.trim() || null;
+    const payload: CreateAppointmentPayload = {
+      patientName,
+      addedBy,
+      streetAddress: streetAddressValue || null,
+      city: cityValue || null,
+      state: stateValue || null,
+      patientPhone: patientPhoneValue,
+      patientEmail: patientEmailValue,
+      appointmentDate: appointmentDate!.toISOString(),
+      examType: savedExamTypes.find((item) => item.id === selectedExamTypeId)?.name ?? "",
+      oneDriveLink: oneDriveLinkValue || undefined,
+      internalNotes: (form.elements.namedItem("internalNotes") as HTMLInputElement).value.trim() || undefined,
+      assignedDoctorId: (form.elements.namedItem("assignedDoctorId") as HTMLSelectElement).value || null,
+    };
+
     setLoadingCreate(true);
     try {
-      const patientPhoneValue = (form.elements.namedItem("patientPhone") as HTMLInputElement)?.value.trim() || null;
-      const patientEmailValue = (form.elements.namedItem("patientEmail") as HTMLInputElement)?.value.trim() || null;
-      const data = {
-        patientName,
-        addedBy,
-        streetAddress: streetAddressValue || null,
-        city: cityValue || null,
-        state: stateValue || null,
-        patientPhone: patientPhoneValue,
-        patientEmail: patientEmailValue,
-        appointmentDate: appointmentDate!.toISOString(),
-        examType: (form.elements.namedItem("examType") as HTMLInputElement).value,
-        oneDriveLink: oneDriveLinkValue || undefined,
-        internalNotes: (form.elements.namedItem("internalNotes") as HTMLInputElement).value.trim() || undefined,
-        assignedDoctorId: (form.elements.namedItem("assignedDoctorId") as HTMLSelectElement).value || null,
-      };
-      const res = await fetch("/api/appointments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setFormErrors({ form: (err.error as string) ?? "Failed to create appointment." });
-        return;
-      }
-      const created = await res.json();
-      setAppointments((prev) =>
-        [...prev, created].sort(
-          (a, b) =>
-            new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime()
-        )
-      );
-      setShowForm(false);
-      form.reset();
-      showToast("Appointment created.");
+      await createAppointment(payload);
     } finally {
       setLoadingCreate(false);
+    }
+  };
+
+  const handleDuplicateProceed = async () => {
+    if (!pendingCreatePayload) return;
+    setCreatingDuplicateOverride(true);
+    setFormErrors({});
+    try {
+      await createAppointment({ ...pendingCreatePayload, allowDuplicate: true });
+    } finally {
+      setCreatingDuplicateOverride(false);
+    }
+  };
+
+  const handleAddExamType = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setAddExamTypeErrors({});
+    const form = e.currentTarget;
+    const name = (form.elements.namedItem("examTypeName") as HTMLInputElement).value.trim();
+    if (!name) {
+      setAddExamTypeErrors({ examTypeName: "Exam type is required." });
+      return;
+    }
+
+    setLoadingAddExamType(true);
+    try {
+      const res = await fetch("/api/exam-types", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAddExamTypeErrors({ form: (data.error as string) || "Failed to save exam type." });
+        return;
+      }
+      const created = data as SavedExamType;
+      const safeCreated: SavedExamType = {
+        id: created.id ?? "",
+        name: created.name ?? "",
+      };
+      setSavedExamTypes((prev) =>
+        [...prev, safeCreated].sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setShowAddExamType(false);
+      form.reset();
+      setSelectedExamTypeId(safeCreated.id);
+      showToast("Exam type saved.");
+    } finally {
+      setLoadingAddExamType(false);
+    }
+  };
+
+  const handleAddAddress = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setAddAddressErrors({});
+    const form = e.currentTarget;
+    const streetAddressValue = (form.elements.namedItem("addressStreet") as HTMLInputElement).value.trim();
+    const cityValue = (form.elements.namedItem("addressCity") as HTMLInputElement).value.trim();
+    const stateValue = (form.elements.namedItem("addressState") as HTMLInputElement).value.trim();
+    const errors: Record<string, string> = {};
+    if (!streetAddressValue) errors.addressStreet = "Street address is required.";
+    if (!cityValue) errors.addressCity = "City is required.";
+    if (!stateValue) errors.addressState = "State is required.";
+    if (Object.keys(errors).length) {
+      setAddAddressErrors(errors);
+      return;
+    }
+
+    setLoadingAddAddress(true);
+    try {
+      const res = await fetch("/api/clinic-addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          streetAddress: streetAddressValue,
+          city: cityValue,
+          state: stateValue,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAddAddressErrors({ form: (data.error as string) || "Failed to save address." });
+        return;
+      }
+
+      const created = data as SavedAddress;
+      const safeCreated: SavedAddress = {
+        id: created.id ?? "",
+        streetAddress: created.streetAddress ?? "",
+        city: created.city ?? "",
+        state: created.state ?? "",
+      };
+      setSavedAddresses((prev) =>
+        [...prev, safeCreated].sort((a, b) => a.streetAddress.localeCompare(b.streetAddress))
+      );
+      setShowAddAddress(false);
+      form.reset();
+      setSelectedAddressId(safeCreated.id);
+      setStreetAddress(safeCreated.streetAddress);
+      setCity(safeCreated.city);
+      setState(safeCreated.state);
+      showToast("Address saved.");
+    } finally {
+      setLoadingAddAddress(false);
     }
   };
 
@@ -185,12 +510,16 @@ export function ReceptionDashboard({
     const streetAddressValue = (form.elements.namedItem("streetAddress") as HTMLInputElement).value.trim();
     const cityValue = (form.elements.namedItem("city") as HTMLInputElement).value.trim();
     const stateValue = (form.elements.namedItem("state") as HTMLInputElement).value.trim();
-    const appointmentDateValue = (form.elements.namedItem("appointmentDate") as HTMLInputElement).value;
+    const appointmentDateDayValue = (form.elements.namedItem("appointmentDateDay") as HTMLInputElement).value;
+    const appointmentTimeValue = (form.elements.namedItem("appointmentTime") as HTMLSelectElement).value;
     const oneDriveLinkValue = (form.elements.namedItem("oneDriveLink") as HTMLInputElement).value.trim();
 
     const errors: Record<string, string> = {};
     if (!patientName) errors.patientName = "Patient name is required.";
-    const appointmentDate = appointmentDateValue ? new Date(appointmentDateValue) : null;
+    const appointmentDate =
+      appointmentDateDayValue && appointmentTimeValue
+        ? new Date(`${appointmentDateDayValue}T${appointmentTimeValue}`)
+        : null;
     if (appointmentDate && isPastDate(appointmentDate.toISOString())) {
       errors.appointmentDate = "Date & time cannot be in the past.";
     }
@@ -212,10 +541,6 @@ export function ReceptionDashboard({
         city: cityValue || null,
         state: stateValue || null,
         appointmentDate: appointmentDate?.toISOString(),
-        durationMinutes: parseInt(
-          (form.elements.namedItem("durationMinutes") as HTMLInputElement).value,
-          10
-        ),
         examType: (form.elements.namedItem("examType") as HTMLInputElement).value,
         status: (form.elements.namedItem("status") as HTMLSelectElement).value as "scheduled" | "completed" | "cancelled",
         patientPhone: patientPhoneValue,
@@ -289,6 +614,27 @@ export function ReceptionDashboard({
     }
   };
 
+  const confirmDeleteAppointment = async () => {
+    if (!deleteConfirmId) return;
+    const id = deleteConfirmId;
+    setDeleteConfirmId(null);
+    setLoadingDeleteId(id);
+    try {
+      const res = await fetch(`/api/appointments/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast((err.error as string) ?? "Failed to delete appointment.");
+        return;
+      }
+      setAppointments((prev) => prev.filter((a) => a.id !== id));
+      if (editingId === id) setEditingId(null);
+      router.refresh();
+      showToast("Appointment deleted permanently.");
+    } finally {
+      setLoadingDeleteId(null);
+    }
+  };
+
   const editingAppointment = editingId
     ? appointments.find((a) => a.id === editingId)
     : null;
@@ -318,6 +664,19 @@ export function ReceptionDashboard({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [cancelConfirmId]);
+
+  // Escape to close delete confirm
+  useEffect(() => {
+    if (!deleteConfirmId) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setDeleteConfirmId(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deleteConfirmId]);
 
   // Modal focus: focus first focusable when edit modal opens; trap focus; return focus on close
   useEffect(() => {
@@ -360,13 +719,6 @@ export function ReceptionDashboard({
     "w-full rounded-[var(--dec-radius-sm)] border border-[var(--dec-error)] bg-white px-3 py-2.5 text-[var(--dec-text)] focus:border-[var(--dec-base)] focus:outline-none focus:ring-2 focus:ring-[var(--dec-base)]/20";
   const labelClass = "mb-1.5 block text-sm font-medium text-[var(--dec-text)]";
 
-  const statusTabs: { value: StatusFilter; label: string }[] = [
-    { value: "all", label: "All" },
-    { value: "scheduled", label: "Scheduled" },
-    { value: "completed", label: "Completed" },
-    { value: "cancelled", label: "Cancelled" },
-  ];
-
   return (
     <div>
       <Toast message={successMessage ?? ""} />
@@ -378,7 +730,24 @@ export function ReceptionDashboard({
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => setShowForm((v) => !v)}
+            onClick={handleDownloadSchedule}
+            disabled={filteredAppointments.length === 0}
+            className="rounded-full border border-[var(--dec-border)] bg-white px-5 py-2.5 text-sm font-medium text-[var(--dec-text)] transition hover:bg-[var(--dec-light-soft)] disabled:opacity-60"
+          >
+            Download schedule
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setShowForm((v) => {
+                const next = !v;
+                if (!next) {
+                  setDuplicateWarning(null);
+                  setPendingCreatePayload(null);
+                }
+                return next;
+              })
+            }
             className="rounded-full bg-[var(--dec-base)] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--dec-base-hover)] hover:shadow"
           >
             {showForm ? "Cancel" : "New appointment"}
@@ -437,26 +806,71 @@ export function ReceptionDashboard({
             </div>
             <div className="sm:col-span-2">
               <label className={labelClass}>Street address</label>
-              <input name="streetAddress" type="text" placeholder="123 Main St" className={inputClass} />
+              <select
+                name="streetAddress"
+                value={selectedAddressId ?? ""}
+                onChange={(e) => applySavedAddress(e.target.value)}
+                className={inputClass}
+              >
+                <option value="">— Select saved address —</option>
+                {savedAddresses.map((address) => (
+                  <option key={address.id} value={address.id}>
+                    {address.streetAddress}
+                  </option>
+                ))}
+                <option value={ADD_ADDRESS_OPTION}>+ Add address</option>
+              </select>
+              <p className="mt-1 text-xs text-[var(--dec-muted)]">
+                Selecting a street address auto-fills city and state.
+              </p>
             </div>
             <div>
               <label className={labelClass}>City</label>
-              <input name="city" type="text" placeholder="Austin" className={inputClass} />
+              <input
+                name="city"
+                type="text"
+                placeholder="Austin"
+                className={inputClass}
+                value={city ?? ""}
+                onChange={(e) => setCity(e.target.value)}
+              />
             </div>
             <div>
               <label className={labelClass}>State</label>
-              <input name="state" type="text" placeholder="TX" className={inputClass} />
+              <input
+                name="state"
+                type="text"
+                placeholder="TX"
+                className={inputClass}
+                value={state ?? ""}
+                onChange={(e) => setState(e.target.value)}
+              />
             </div>
             <div>
               <label className={labelClass}>Date & time</label>
-              <input
-                name="appointmentDate"
-                type="datetime-local"
-                required
-                className={formErrors.appointmentDate ? inputErrorClass : inputClass}
-                aria-invalid={!!formErrors.appointmentDate}
-                aria-describedby={formErrors.appointmentDate ? "create-err-appointmentDate" : undefined}
-              />
+              <div className="flex gap-2">
+                <input
+                  name="appointmentDateDay"
+                  type="date"
+                  required
+                  className={formErrors.appointmentDate ? inputErrorClass : inputClass}
+                  aria-invalid={!!formErrors.appointmentDate}
+                  aria-describedby={formErrors.appointmentDate ? "create-err-appointmentDate" : undefined}
+                />
+                <select
+                  name="appointmentTime"
+                  required
+                  className={formErrors.appointmentDate ? inputErrorClass : inputClass}
+                  aria-invalid={!!formErrors.appointmentDate}
+                >
+                  <option value="">Time</option>
+                  {QUARTER_HOUR_TIMES.map((time) => (
+                    <option key={time} value={time}>
+                      {formatTimeLabel(time)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {formErrors.appointmentDate && (
                 <p id="create-err-appointmentDate" className="mt-1 text-sm text-[var(--dec-error)]">
                   {formErrors.appointmentDate}
@@ -465,7 +879,24 @@ export function ReceptionDashboard({
             </div>
             <div>
               <label className={labelClass}>Exam type</label>
-              <input name="examType" required className={inputClass} />
+              <select
+                name="examType"
+                value={selectedExamTypeId ?? ""}
+                onChange={(e) => applySavedExamType(e.target.value)}
+                required
+                className={inputClass}
+              >
+                <option value="">— Select exam type —</option>
+                {savedExamTypes.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+                <option value={ADD_EXAM_TYPE_OPTION}>+ Add exam type</option>
+              </select>
+              {formErrors.examType && (
+                <p className="mt-1 text-sm text-[var(--dec-error)]">{formErrors.examType}</p>
+              )}
             </div>
             <div>
               <label className={labelClass}>Assign doctor</label>
@@ -544,7 +975,11 @@ export function ReceptionDashboard({
             </button>
             <button
               type="button"
-              onClick={() => setShowForm(false)}
+              onClick={() => {
+                setDuplicateWarning(null);
+                setPendingCreatePayload(null);
+                setShowForm(false);
+              }}
               disabled={loadingCreate}
               className="rounded-full border border-[var(--dec-border)] bg-white px-5 py-2.5 text-sm font-medium text-[var(--dec-text)] transition hover:bg-[var(--dec-light-soft)] disabled:opacity-60"
             >
@@ -556,41 +991,46 @@ export function ReceptionDashboard({
 
       {appointments.length > 0 && (
         <>
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 grid gap-4 xl:grid-cols-[1fr_auto] xl:items-center">
           <div className="flex flex-wrap items-center gap-3">
-            {statusTabs.map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setStatusFilter(value)}
-                className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                  statusFilter === value
-                    ? "bg-[var(--dec-base)] text-white"
-                    : "bg-[var(--dec-light-soft)] text-[var(--dec-text)] hover:bg-[var(--dec-light)]/60"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-            <div className="h-6 w-px bg-[var(--dec-border)]" />
-            <button
-              type="button"
-              onClick={() => setDateFilter((d) => (d === "today" ? "all" : "today"))}
-              className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                dateFilter === "today"
-                  ? "bg-[var(--dec-base)] text-white"
-                  : "bg-[var(--dec-light-soft)] text-[var(--dec-text)] hover:bg-[var(--dec-light)]/60"
-              }`}
+            <input
+              type="date"
+              value={selectedDateFilter}
+              onChange={(e) => setSelectedDateFilter(e.target.value)}
+              className="rounded-[var(--dec-radius-sm)] border border-[var(--dec-border)] bg-white px-3 py-1.5 text-sm text-[var(--dec-text)] focus:border-[var(--dec-base)] focus:outline-none focus:ring-2 focus:ring-[var(--dec-base)]/20"
+              aria-label="Filter by date"
+            />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="rounded-[var(--dec-radius-sm)] border border-[var(--dec-border)] bg-white px-3 py-1.5 pr-8 text-sm text-[var(--dec-text)] focus:border-[var(--dec-base)] focus:outline-none focus:ring-2 focus:ring-[var(--dec-base)]/20"
+              aria-label="Filter by status"
             >
-              Today
-            </button>
+              <option value="all">All statuses</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <select
+              value={doctorFilterId}
+              onChange={(e) => setDoctorFilterId(e.target.value)}
+              className="rounded-[var(--dec-radius-sm)] border border-[var(--dec-border)] bg-white px-3 py-1.5 pr-8 text-sm text-[var(--dec-text)] focus:border-[var(--dec-base)] focus:outline-none focus:ring-2 focus:ring-[var(--dec-base)]/20"
+              aria-label="Filter by doctor"
+            >
+              <option value="all">All doctors</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name ?? "Unnamed doctor"}
+                </option>
+              ))}
+            </select>
           </div>
           <input
             type="search"
             placeholder="Search by patient name…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-[var(--dec-radius-sm)] border border-[var(--dec-border)] bg-white px-3 py-2 text-sm text-[var(--dec-text)] placeholder:text-[var(--dec-muted)] focus:border-[var(--dec-base)] focus:outline-none focus:ring-2 focus:ring-[var(--dec-base)]/20 sm:max-w-xs"
+            className="w-full rounded-[var(--dec-radius-sm)] border border-[var(--dec-border)] bg-white px-3 py-2 text-sm text-[var(--dec-text)] placeholder:text-[var(--dec-muted)] focus:border-[var(--dec-base)] focus:outline-none focus:ring-2 focus:ring-[var(--dec-base)]/20 xl:w-[320px]"
             aria-label="Search by patient name"
           />
         </div>
@@ -620,7 +1060,8 @@ export function ReceptionDashboard({
             type="button"
             onClick={() => {
               setStatusFilter("all");
-              setDateFilter("all");
+              setSelectedDateFilter("");
+              setDoctorFilterId("all");
               setSearchQuery("");
             }}
             className="mt-4 rounded-full border border-[var(--dec-border)] bg-white px-5 py-2.5 text-sm font-medium text-[var(--dec-text)] transition hover:bg-[var(--dec-light-soft)]"
@@ -681,7 +1122,7 @@ export function ReceptionDashboard({
                       }}
                       type="button"
                       onClick={() => setEditingId(apt.id)}
-                      disabled={!!loadingEditId || !!loadingStatusId}
+                      disabled={!!loadingEditId || !!loadingStatusId || !!loadingDeleteId}
                       className="rounded-lg bg-[var(--dec-base)]/10 px-3 py-1.5 text-sm font-medium text-[var(--dec-base)] transition hover:bg-[var(--dec-base)]/20 disabled:opacity-60"
                     >
                       Edit appointment
@@ -701,7 +1142,7 @@ export function ReceptionDashboard({
                         <button
                           type="button"
                           onClick={() => updateStatus(apt.id, "completed")}
-                          disabled={loadingStatusId === apt.id}
+                          disabled={loadingStatusId === apt.id || loadingDeleteId === apt.id}
                           className="rounded-lg px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60"
                         >
                           {loadingStatusId === apt.id ? "…" : "Mark completed"}
@@ -709,19 +1150,81 @@ export function ReceptionDashboard({
                         <button
                           type="button"
                           onClick={() => updateStatus(apt.id, "cancelled")}
-                          disabled={loadingStatusId === apt.id}
+                          disabled={loadingStatusId === apt.id || loadingDeleteId === apt.id}
                           className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--dec-error)] transition hover:bg-red-50 disabled:opacity-60"
                         >
                           Cancel
                         </button>
                       </>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmId(apt.id)}
+                      disabled={!!loadingEditId || !!loadingStatusId || !!loadingDeleteId}
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--dec-error)] transition hover:bg-red-50 disabled:opacity-60"
+                    >
+                      Delete permanently
+                    </button>
                   </div>
                 </div>
               </div>
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Duplicate warning modal */}
+      {duplicateWarning && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--dec-base)]/30 p-4 backdrop-blur-sm"
+          onClick={() => !creatingDuplicateOverride && setDuplicateWarning(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="duplicate-warning-title"
+        >
+          <div
+            className="dec-card-container w-full max-w-lg border border-[var(--dec-border)] p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="duplicate-warning-title" className="text-lg font-semibold text-[var(--dec-base)]">
+              Possible duplicate appointment
+            </h2>
+            <p className="mt-3 text-sm text-[var(--dec-muted)]">
+              An appointment for this claimant is already scheduled on{" "}
+              <strong>{formatDate(duplicateWarning.appointmentDate)}</strong>{" "}
+              at{" "}
+              <strong>
+                {[
+                  duplicateWarning.streetAddress,
+                  duplicateWarning.city,
+                  duplicateWarning.state,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || "no location"}
+              </strong>{" "}
+              with{" "}
+              <strong>{duplicateWarning.doctorName ?? "an unassigned doctor"}</strong>. This may be a duplicate.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={handleDuplicateProceed}
+                disabled={creatingDuplicateOverride}
+                className="rounded-full bg-[var(--dec-base)] px-4 py-2 text-sm font-medium text-white transition hover:bg-[var(--dec-base-hover)] disabled:opacity-60"
+              >
+                {creatingDuplicateOverride ? "Creating..." : "Continue anyway"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDuplicateWarning(null)}
+                disabled={creatingDuplicateOverride}
+                className="rounded-full border border-[var(--dec-border)] bg-white px-4 py-2 text-sm font-medium text-[var(--dec-text)] transition hover:bg-[var(--dec-light-soft)] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Cancel confirmation modal */}
@@ -760,6 +1263,185 @@ export function ReceptionDashboard({
                 Keep
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent delete confirmation modal */}
+      {deleteConfirmId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--dec-base)]/30 p-4 backdrop-blur-sm"
+          onClick={() => !loadingDeleteId && setDeleteConfirmId(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-confirm-title"
+        >
+          <div
+            className="dec-card-container w-full max-w-sm border border-[var(--dec-border)] p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-confirm-title" className="text-lg font-semibold text-[var(--dec-base)]">
+              Delete this appointment permanently?
+            </h2>
+            <p className="mt-2 text-sm text-[var(--dec-muted)]">
+              This action cannot be undone. The appointment will be permanently removed.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={confirmDeleteAppointment}
+                disabled={loadingDeleteId === deleteConfirmId}
+                className="rounded-full bg-[var(--dec-error)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+              >
+                {loadingDeleteId === deleteConfirmId ? "Deleting…" : "Yes, delete permanently"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmId(null)}
+                disabled={!!loadingDeleteId}
+                className="rounded-full border border-[var(--dec-border)] bg-white px-4 py-2 text-sm font-medium text-[var(--dec-text)] transition hover:bg-[var(--dec-light-soft)] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddExamType && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--dec-base)]/30 p-4 backdrop-blur-sm"
+          onClick={() => !loadingAddExamType && setShowAddExamType(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-exam-type-title"
+        >
+          <div
+            className="dec-card-container w-full max-w-md border border-[var(--dec-border)] p-6 shadow-xl sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="add-exam-type-title" className="mb-6 text-xl font-semibold text-[var(--dec-base)]">
+              Add exam type
+            </h2>
+            {addExamTypeErrors.form && (
+              <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-[var(--dec-error)]">
+                {addExamTypeErrors.form}
+              </p>
+            )}
+            <form onSubmit={handleAddExamType} className="flex flex-col gap-4">
+              <div>
+                <label htmlFor="examTypeName" className={labelClass}>Exam type name</label>
+                <input
+                  id="examTypeName"
+                  name="examTypeName"
+                  type="text"
+                  className={addExamTypeErrors.examTypeName ? inputErrorClass : inputClass}
+                  aria-invalid={!!addExamTypeErrors.examTypeName}
+                />
+                {addExamTypeErrors.examTypeName && (
+                  <p className="mt-1 text-sm text-[var(--dec-error)]">{addExamTypeErrors.examTypeName}</p>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <button
+                  type="submit"
+                  disabled={loadingAddExamType}
+                  className="rounded-full bg-[var(--dec-base)] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--dec-base-hover)] hover:shadow disabled:opacity-60"
+                >
+                  {loadingAddExamType ? "Saving..." : "Save exam type"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddExamType(false)}
+                  disabled={loadingAddExamType}
+                  className="rounded-full border border-[var(--dec-border)] bg-white px-5 py-2.5 text-sm font-medium text-[var(--dec-text)] transition hover:bg-[var(--dec-light-soft)] disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddAddress && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--dec-base)]/30 p-4 backdrop-blur-sm"
+          onClick={() => !loadingAddAddress && setShowAddAddress(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-address-title"
+        >
+          <div
+            className="dec-card-container w-full max-w-md border border-[var(--dec-border)] p-6 shadow-xl sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="add-address-title" className="mb-6 text-xl font-semibold text-[var(--dec-base)]">
+              Add saved address
+            </h2>
+            {addAddressErrors.form && (
+              <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-[var(--dec-error)]">
+                {addAddressErrors.form}
+              </p>
+            )}
+            <form onSubmit={handleAddAddress} className="flex flex-col gap-4">
+              <div>
+                <label htmlFor="addressStreet" className={labelClass}>Street address</label>
+                <input
+                  id="addressStreet"
+                  name="addressStreet"
+                  type="text"
+                  className={addAddressErrors.addressStreet ? inputErrorClass : inputClass}
+                  aria-invalid={!!addAddressErrors.addressStreet}
+                />
+                {addAddressErrors.addressStreet && (
+                  <p className="mt-1 text-sm text-[var(--dec-error)]">{addAddressErrors.addressStreet}</p>
+                )}
+              </div>
+              <div>
+                <label htmlFor="addressCity" className={labelClass}>City</label>
+                <input
+                  id="addressCity"
+                  name="addressCity"
+                  type="text"
+                  className={addAddressErrors.addressCity ? inputErrorClass : inputClass}
+                  aria-invalid={!!addAddressErrors.addressCity}
+                />
+                {addAddressErrors.addressCity && (
+                  <p className="mt-1 text-sm text-[var(--dec-error)]">{addAddressErrors.addressCity}</p>
+                )}
+              </div>
+              <div>
+                <label htmlFor="addressState" className={labelClass}>State</label>
+                <input
+                  id="addressState"
+                  name="addressState"
+                  type="text"
+                  className={addAddressErrors.addressState ? inputErrorClass : inputClass}
+                  aria-invalid={!!addAddressErrors.addressState}
+                />
+                {addAddressErrors.addressState && (
+                  <p className="mt-1 text-sm text-[var(--dec-error)]">{addAddressErrors.addressState}</p>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <button
+                  type="submit"
+                  disabled={loadingAddAddress}
+                  className="rounded-full bg-[var(--dec-base)] px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--dec-base-hover)] hover:shadow disabled:opacity-60"
+                >
+                  {loadingAddAddress ? "Saving..." : "Save address"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddAddress(false)}
+                  disabled={loadingAddAddress}
+                  className="rounded-full border border-[var(--dec-border)] bg-white px-5 py-2.5 text-sm font-medium text-[var(--dec-text)] transition hover:bg-[var(--dec-light-soft)] disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -821,28 +1503,32 @@ export function ReceptionDashboard({
               </div>
               <div>
                 <label className={labelClass}>Date & time</label>
-                <input
-                  name="appointmentDate"
-                  type="datetime-local"
-                  required
-                  defaultValue={toDateTimeLocal(new Date(editingAppointment.appointmentDate))}
-                  className={formErrors.appointmentDate ? inputErrorClass : inputClass}
-                  aria-invalid={!!formErrors.appointmentDate}
-                />
+                <div className="flex gap-2">
+                  <input
+                    name="appointmentDateDay"
+                    type="date"
+                    required
+                    defaultValue={toDateInputValue(new Date(editingAppointment.appointmentDate))}
+                    className={formErrors.appointmentDate ? inputErrorClass : inputClass}
+                    aria-invalid={!!formErrors.appointmentDate}
+                  />
+                  <select
+                    name="appointmentTime"
+                    required
+                    defaultValue={toTimeInputValue(snapDateToQuarterHour(new Date(editingAppointment.appointmentDate)))}
+                    className={formErrors.appointmentDate ? inputErrorClass : inputClass}
+                    aria-invalid={!!formErrors.appointmentDate}
+                  >
+                    {QUARTER_HOUR_TIMES.map((time) => (
+                      <option key={time} value={time}>
+                        {formatTimeLabel(time)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 {formErrors.appointmentDate && (
                   <p className="mt-1 text-sm text-[var(--dec-error)]">{formErrors.appointmentDate}</p>
                 )}
-              </div>
-              <div>
-                <label className={labelClass}>Duration (minutes)</label>
-                <input
-                  name="durationMinutes"
-                  type="number"
-                  min={5}
-                  max={480}
-                  defaultValue={editingAppointment.durationMinutes}
-                  className={inputClass}
-                />
               </div>
               <div>
                 <label className={labelClass}>Exam type</label>

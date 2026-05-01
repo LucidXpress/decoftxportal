@@ -14,7 +14,6 @@ const updateSchema = z.object({
   city: z.string().optional().nullable().or(z.literal("")).transform((s) => (s && s.trim()) || null),
   state: z.string().optional().nullable().or(z.literal("")).transform((s) => (s && s.trim()) || null),
   appointmentDate: z.string().datetime().optional(),
-  durationMinutes: z.number().int().min(5).max(480).optional(),
   examType: z.string().min(1).optional(),
   status: z.enum(["scheduled", "completed", "cancelled"]).optional(),
   oneDriveLink: z
@@ -28,6 +27,11 @@ const updateSchema = z.object({
   internalNotes: z.string().optional().nullable(),
   assignedDoctorId: z.string().optional().nullable(),
 });
+
+function isQuarterHour(date: Date): boolean {
+  const minutes = date.getMinutes();
+  return minutes % 15 === 0 && date.getSeconds() === 0 && date.getMilliseconds() === 0;
+}
 
 export async function PATCH(
   _req: Request,
@@ -67,9 +71,15 @@ export async function PATCH(
         { status: 400 }
       );
     }
+    if (!isQuarterHour(appointmentDate)) {
+      return NextResponse.json(
+        { error: "Appointment time must be in 15-minute increments (e.g. 1:00, 1:15, 1:30, 1:45)." },
+        { status: 400 }
+      );
+    }
     updatePayload.appointment_date = data.appointmentDate;
   }
-  if (data.durationMinutes != null) updatePayload.duration_minutes = data.durationMinutes;
+  updatePayload.duration_minutes = 15;
   if (data.examType != null) updatePayload.exam_type = data.examType;
   if (data.status != null) updatePayload.status = data.status;
   if (data.streetAddress !== undefined) updatePayload.street_address = data.streetAddress;
@@ -125,4 +135,51 @@ export async function GET(
   }
   const appointment = dbAppointmentToAppointment(appointmentRow, doctor);
   return NextResponse.json(appointment);
+}
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { allowed } = checkRateLimit(session.user.id, "appointments");
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+  const role = (session.user as { role: string }).role;
+  if (role !== "reception") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: existing, error: existingError } = await supabase
+    .from("appointments")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (existingError) return NextResponse.json({ error: existingError.message }, { status: 500 });
+  if (!existing) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const { error } = await supabase
+    .from("appointments")
+    .delete()
+    .eq("id", id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const { data: afterDelete, error: verifyError } = await supabase
+    .from("appointments")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (verifyError) return NextResponse.json({ error: verifyError.message }, { status: 500 });
+  if (afterDelete) {
+    return NextResponse.json({ error: "Failed to delete appointment." }, { status: 500 });
+  }
+  return new NextResponse(null, { status: 204 });
 }

@@ -62,10 +62,32 @@ export default async function DashboardPage() {
     .order("name", { ascending: true });
   const doctors = (doctorRows ?? []).map((u) => ({ id: u.id, name: u.name, email: u.email }));
 
+  const { data: addressRows } = await supabase
+    .from("clinic_addresses")
+    .select("id, street_address, city, state")
+    .order("street_address", { ascending: true });
+  const savedAddresses = (addressRows ?? []).map((row) => ({
+    id: row.id,
+    streetAddress: row.street_address,
+    city: row.city,
+    state: row.state,
+  }));
+
+  const { data: examTypeRows } = await supabase
+    .from("exam_types")
+    .select("id, name")
+    .order("name", { ascending: true });
+  const savedExamTypes = (examTypeRows ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+  }));
+
   return (
     <ReceptionDashboard
       appointments={appointments}
       doctors={doctors}
+      savedAddresses={savedAddresses}
+      savedExamTypes={savedExamTypes}
     />
   );
 }

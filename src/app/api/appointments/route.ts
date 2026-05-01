@@ -43,7 +43,6 @@ const createSchema = z.object({
     .nullable()
     .transform((s) => (s && s.trim()) || null),
   appointmentDate: z.string().datetime(),
-  durationMinutes: z.number().int().min(5).max(480).default(60),
   examType: z.string().min(1),
   oneDriveLink: z
     .string()
@@ -52,7 +51,17 @@ const createSchema = z.object({
     .refine((v) => !v || v === "" || isAllowedUrl(v), { message: "URL must be https or http" }),
   internalNotes: z.string().optional(),
   assignedDoctorId: z.string().optional().nullable(),
+  allowDuplicate: z.boolean().optional().default(false),
 });
+
+function normalizeName(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isQuarterHour(date: Date): boolean {
+  const minutes = date.getMinutes();
+  return minutes % 15 === 0 && date.getSeconds() === 0 && date.getMilliseconds() === 0;
+}
 
 export async function GET() {
   const session = await auth();
@@ -122,7 +131,55 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  if (!isQuarterHour(appointmentDate)) {
+    return NextResponse.json(
+      { error: "Appointment time must be in 15-minute increments (e.g. 1:00, 1:15, 1:30, 1:45)." },
+      { status: 400 }
+    );
+  }
   const supabase = await createClient();
+  if (!data.allowDuplicate) {
+    const { data: scheduledRows, error: scheduledError } = await supabase
+      .from("appointments")
+      .select("id, patient_name, appointment_date, street_address, city, state, assigned_doctor_id")
+      .eq("status", "scheduled")
+      .ilike("patient_name", data.patientName.trim())
+      .order("appointment_date", { ascending: true })
+      .limit(10);
+    if (scheduledError) {
+      return NextResponse.json({ error: scheduledError.message }, { status: 500 });
+    }
+    const duplicate = (scheduledRows ?? []).find(
+      (row) => normalizeName(row.patient_name ?? "") === normalizeName(data.patientName)
+    );
+    if (duplicate) {
+      let doctorName: string | null = null;
+      if (duplicate.assigned_doctor_id) {
+        const { data: doctor } = await supabase
+          .from("users")
+          .select("name, email")
+          .eq("id", duplicate.assigned_doctor_id)
+          .maybeSingle();
+        if (doctor) doctorName = doctor.name ?? doctor.email ?? null;
+      }
+      return NextResponse.json(
+        {
+          error: "A scheduled appointment for this claimant already exists.",
+          code: "DUPLICATE_APPOINTMENT",
+          duplicate: {
+            id: duplicate.id,
+            patientName: duplicate.patient_name,
+            appointmentDate: duplicate.appointment_date,
+            streetAddress: duplicate.street_address,
+            city: duplicate.city,
+            state: duplicate.state,
+            doctorName,
+          },
+        },
+        { status: 409 }
+      );
+    }
+  }
   const insertPayload = appointmentInsertToDb({
     patientName: data.patientName,
     addedBy: data.addedBy,
@@ -132,7 +189,7 @@ export async function POST(req: Request) {
     patientPhone: data.patientPhone ?? null,
     patientEmail: data.patientEmail ?? null,
     appointmentDate,
-    durationMinutes: data.durationMinutes,
+    durationMinutes: 15,
     examType: data.examType,
     oneDriveLink: data.oneDriveLink || null,
     internalNotes: data.internalNotes ?? null,
@@ -161,7 +218,14 @@ export async function POST(req: Request) {
   ]
     .filter(Boolean)
     .join("\n");
-  const outlookEvent = { subject: eventTitle, start, end, body: eventBody || undefined };
+  const doctorCategory = doctor?.name?.trim() || null;
+  const outlookEvent = {
+    subject: eventTitle,
+    start,
+    end,
+    body: eventBody || undefined,
+    categories: doctorCategory ? [doctorCategory] : undefined,
+  };
   await createOutlookEvent(session.user.id, outlookEvent);
   if (row.assigned_doctor_id) {
     await createOutlookEvent(row.assigned_doctor_id, outlookEvent);
