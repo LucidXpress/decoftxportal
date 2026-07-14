@@ -143,7 +143,8 @@ export function ReceptionDashboard({
 
   useEffect(() => {
     if (!successMessage) return;
-    const t = setTimeout(() => setSuccessMessage(null), 3000);
+    const duration = successMessage.toLowerCase().includes("outlook") ? 7000 : 3000;
+    const t = setTimeout(() => setSuccessMessage(null), duration);
     return () => clearTimeout(t);
   }, [successMessage]);
 
@@ -299,7 +300,9 @@ export function ReceptionDashboard({
     URL.revokeObjectURL(url);
   };
 
-  const finishCreateSuccess = (created: Appointment) => {
+  const finishCreateSuccess = (
+    created: Appointment & { outlookSynced?: boolean; outlookError?: string | null }
+  ) => {
     setAppointments((prev) =>
       [...prev, created].sort(
         (a, b) =>
@@ -314,7 +317,15 @@ export function ReceptionDashboard({
     setState("");
     setPendingCreatePayload(null);
     setDuplicateWarning(null);
-    showToast("Appointment created.");
+    if (created.outlookSynced === false) {
+      showToast(
+        created.outlookError
+          ? `Appointment created, but Outlook sync failed: ${created.outlookError}`
+          : "Appointment created, but Outlook sync failed. Check Settings → Outlook connection."
+      );
+    } else {
+      showToast("Appointment created.");
+    }
   };
 
   const createAppointment = async (payload: CreateAppointmentPayload) => {

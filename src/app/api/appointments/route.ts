@@ -226,9 +226,25 @@ export async function POST(req: Request) {
     body: eventBody || undefined,
     categories: doctorCategory ? [doctorCategory] : undefined,
   };
-  await createOutlookEvent(session.user.id, outlookEvent);
+  // Sync to the connected reception calendar. Doctor accounts are name-only now,
+  // so doctor calendar push is best-effort only if they still have tokens.
+  const outlookResult = await createOutlookEvent(session.user.id, outlookEvent);
+  if (!outlookResult.ok) {
+    console.error("[Appointment] Outlook sync failed for reception user.", {
+      appointmentId: row.id,
+      userId: session.user.id,
+      error: outlookResult.error,
+    });
+  }
   if (row.assigned_doctor_id) {
-    await createOutlookEvent(row.assigned_doctor_id, outlookEvent);
+    const doctorOutlook = await createOutlookEvent(row.assigned_doctor_id, outlookEvent);
+    if (!doctorOutlook.ok) {
+      console.info("[Appointment] Outlook sync skipped/failed for assigned doctor.", {
+        appointmentId: row.id,
+        doctorId: row.assigned_doctor_id,
+        error: doctorOutlook.error,
+      });
+    }
   }
 
   // Email the assigned doctor when they have an email address
@@ -285,5 +301,9 @@ export async function POST(req: Request) {
     }).catch(() => {});
   }
 
-  return NextResponse.json(appointment);
+  return NextResponse.json({
+    ...appointment,
+    outlookSynced: outlookResult.ok,
+    outlookError: outlookResult.ok ? null : outlookResult.error ?? "Outlook sync failed.",
+  });
 }
